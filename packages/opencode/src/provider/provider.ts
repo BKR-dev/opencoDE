@@ -706,6 +706,13 @@ export namespace Provider {
       providers[providerID] = mergeDeep(match, provider)
     }
 
+    // When OPENCODE_ONLY_GITHUB is enabled, ensure github-copilot providers are present even without env/auth/plugins
+    if (process.env.OPENCODE_ONLY_GITHUB) {
+      if (database["github-copilot"]) mergeProvider("github-copilot", {})
+      if (database["github-copilot-enterprise"]) mergeProvider("github-copilot-enterprise", {})
+    }
+
+
     // extend database from config
     for (const [providerID, provider] of configProviders) {
       const existing = database[providerID]
