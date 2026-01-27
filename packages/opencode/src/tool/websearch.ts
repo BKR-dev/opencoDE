@@ -1,7 +1,8 @@
 import z from "zod"
 import { Tool } from "./tool"
 import DESCRIPTION from "./websearch.txt"
-import { fetchWithToolBypass } from "../net/egress-policy"
+import { fetchWithToolBypass, isEgressBlocked } from "../net/egress-policy"
+import { auditRecordNoWait } from "../audit"
 
 const API_CONFIG = {
   BASE_URL: "https://mcp.exa.ai",
@@ -101,6 +102,8 @@ export const WebSearchTool = Tool.define("websearch", async () => {
           accept: "application/json, text/event-stream",
           "content-type": "application/json",
         }
+
+        await auditRecordNoWait("tool.websearch.request", { sessionID: ctx.sessionID, agent: ctx.agent, query: params.query, baseURL: API_CONFIG.BASE_URL, egressBlocked: isEgressBlocked(), time: new Date().toISOString() })
 
         const response = await fetchWithToolBypass(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.SEARCH}`, {
           method: "POST",

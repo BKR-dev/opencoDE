@@ -1,3 +1,4 @@
+import { auditRecordNoWait } from "../audit"
 // Minimal egress policy wrapper to block external HTTP and package loads when OPENCODE_BLOCK_EXTERNAL_APIS=1 or OPENCODE_ONLY_GITHUB=1
 
 const ALLOWED_DOMAINS = (() => {
@@ -48,5 +49,10 @@ export async function fetchWithToolBypass(input: RequestInfo, init?: RequestInit
 const ALLOWED_PACKAGES = new Set<string>(['@ai-sdk/github-copilot']);
 export function packageAllowed(pkg: string) {
   if (!isEgressBlocked()) return true;
-  return ALLOWED_PACKAGES.has(pkg);
+  const allowed = ALLOWED_PACKAGES.has(pkg);
+  if (!allowed) {
+    // record blocked package install attempts for audit
+    auditRecordNoWait("package.install.blocked", { pkg, allowedPackages: Array.from(ALLOWED_PACKAGES), time: new Date().toISOString(), egressBlocked: true })
+  }
+  return allowed;
 }
