@@ -55,6 +55,18 @@ if (!arch) {
 const base = "opencode-" + platform + "-" + arch;
 const binary = platform === "windows" ? "opencode.exe" : "opencode";
 
+// Ensure audit logs are written to a repo-local XDG data dir for visibility during development
+const localXdg = path.join(scriptDir, "..", ".local_share");
+if (!process.env.XDG_DATA_HOME) {
+  process.env.XDG_DATA_HOME = localXdg;
+}
+
+// Prefer a locally-built binary in dist/ if present
+const localBuild = path.join(scriptDir, "..", "dist", base, "bin", binary);
+if (fs.existsSync(localBuild)) {
+  run(localBuild);
+}
+
 function findBinary(startDir) {
   let current = startDir;
   for (;;) {
