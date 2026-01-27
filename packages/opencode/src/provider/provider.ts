@@ -1177,6 +1177,22 @@ export namespace Provider {
     const provider = await list()
       .then((val) => Object.values(val))
       .then((x) => x.find((p) => !cfg.provider || Object.keys(cfg.provider).includes(p.id)))
+
+    // If no provider was found, and we're in GitHub-only mode, fall back to github-copilot if available
+    if (!provider && process.env.OPENCODE_ONLY_GITHUB) {
+      const providers = await list()
+      const github = providers["github-copilot"] || providers["github-copilot-enterprise"]
+      if (github) {
+        const [model] = sort(Object.values(github.models))
+        if (model) {
+          return {
+            providerID: github.id,
+            modelID: model.id,
+          }
+        }
+      }
+    }
+
     if (!provider) throw new Error("no providers found")
     const [model] = sort(Object.values(provider.models))
     if (!model) throw new Error("no models found")
