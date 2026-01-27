@@ -390,7 +390,6 @@ export const AuthLogoutCommand = cmd({
       prompts.log.error("No credentials found")
       return
     }
-    const database = await ModelsDev.get()
     const providerID = await prompts.select({
       message: "Select provider",
       options: credentials.map(([key, value]) => ({
