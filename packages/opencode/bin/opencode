@@ -58,6 +58,8 @@ const binary = platform === "windows" ? "opencode.exe" : "opencode";
 // Ensure audit logs are written to a repo-local XDG data dir for visibility during development
 const localXdg = path.join(scriptDir, "..", ".local_share");
 process.env.XDG_DATA_HOME = localXdg;
+// Also export a deterministic audit path the runtime can use to write audit entries
+process.env.OPENCODE_AUDIT_PATH = path.join(localXdg, "opencode", "log", "audit.jsonl");
 
 // Prefer a locally-built binary in dist/ if present
 const localBuild = path.join(scriptDir, "..", "dist", base, "bin", binary);

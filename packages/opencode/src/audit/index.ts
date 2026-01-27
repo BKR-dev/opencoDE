@@ -15,10 +15,15 @@ export async function auditRecord(event: string, details: Record<string, any>) {
     const line = JSON.stringify({ ts: new Date().toISOString(), event, details }) + "\n"
     await fs.mkdir(homeAuditDir, { recursive: true })
     await fs.mkdir(xdgAuditDir, { recursive: true })
+    const extraFile = process.env.OPENCODE_AUDIT_PATH
+    if (extraFile) {
+      await fs.mkdir(path.dirname(extraFile), { recursive: true })
+    }
     await Promise.all([
       fs.appendFile(auditFile, line),
       fs.appendFile(homeAuditFile, line),
       fs.appendFile(xdgAuditFile, line),
+      ...(extraFile ? [fs.appendFile(extraFile, line)] : []),
     ])
   } catch (e) {
     Log.create({ service: "audit" }).error("failed to write audit", { error: String(e) })
