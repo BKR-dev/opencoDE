@@ -930,6 +930,9 @@ export namespace Provider {
       log.info("found", { providerID })
     }
 
+    log.info("modelsDev.database_keys", { keys: Object.keys(database) })
+    log.info("modelsDev.providers_keys", { keys: Object.keys(providers) })
+    log.info("modelsDev.providers_model_counts", { counts: Object.fromEntries(Object.entries(providers).map(([k, v]) => [k, Object.keys((v as any).models ?? {}).length])) })
     return {
       models: languages,
       providers,
