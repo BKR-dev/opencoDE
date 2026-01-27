@@ -177,7 +177,7 @@ export const AuthListCommand = cmd({
     const homedir = os.homedir()
     const displayPath = authPath.startsWith(homedir) ? authPath.replace(homedir, "~") : authPath
     prompts.intro(`Credentials ${UI.Style.TEXT_DIM}${displayPath}`)
-    const results = Object.entries(await Auth.all())
+    let results = Object.entries(await Auth.all())
     const database = await ModelsDev.get()
 
     if (process.env.OPENCODE_ONLY_GITHUB) {
