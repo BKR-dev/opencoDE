@@ -1,0 +1,396 @@
+INFO  2026-01-27T11:51:56 +30ms service=server method=GET path=/event request
+INFO  2026-01-27T11:51:56 +0ms service=server status=started method=GET path=/event request
+INFO  2026-01-27T11:51:56 +0ms service=default directory=/Users/lteixeir/Git/opencoDE creating instance
+INFO  2026-01-27T11:51:56 +0ms service=project directory=/Users/lteixeir/Git/opencoDE fromDirectory
+INFO  2026-01-27T11:51:56 +1ms service=server method=GET path=/session request
+INFO  2026-01-27T11:51:56 +0ms service=server status=started method=GET path=/session request
+INFO  2026-01-27T11:51:56 +0ms service=server method=GET path=/config/providers request
+INFO  2026-01-27T11:51:56 +0ms service=server status=started method=GET path=/config/providers request
+INFO  2026-01-27T11:51:56 +0ms service=server method=GET path=/provider request
+INFO  2026-01-27T11:51:56 +0ms service=server status=started method=GET path=/provider request
+INFO  2026-01-27T11:51:56 +0ms service=server method=GET path=/agent request
+INFO  2026-01-27T11:51:56 +0ms service=server status=started method=GET path=/agent request
+INFO  2026-01-27T11:51:56 +0ms service=server method=GET path=/config request
+INFO  2026-01-27T11:51:56 +0ms service=server status=started method=GET path=/config request
+INFO  2026-01-27T11:51:56 +49ms service=default directory=/Users/lteixeir/Git/opencoDE bootstrapping
+INFO  2026-01-27T11:51:56 +2ms service=config path=/Users/lteixeir/.config/opencode/config.json loading
+INFO  2026-01-27T11:51:56 +0ms service=config path=/Users/lteixeir/.config/opencode/opencode.json loading
+INFO  2026-01-27T11:51:56 +3ms service=config path=/Users/lteixeir/.config/opencode/opencode.jsonc loading
+INFO  2026-01-27T11:51:56 +1ms service=bun cmd=["/Users/lteixeir/Git/opencoDE/packages/opencode/dist/opencode-darwin-arm64/bin/opencode","add","@opencode-ai/plugin@0.0.0-feat/restrict-github-only-202601271151","--exact"] cwd=/Users/lteixeir/.config/opencode running
+INFO  2026-01-27T11:51:56 +2ms service=config path=/Users/lteixeir/Git/opencoDE/.opencode/opencode.jsonc loading
+INFO  2026-01-27T11:51:56 +11ms service=config path=/Users/lteixeir/Git/opencoDE/.opencode/opencode.json loading
+INFO  2026-01-27T11:51:56 +0ms service=bun cmd=["/Users/lteixeir/Git/opencoDE/packages/opencode/dist/opencode-darwin-arm64/bin/opencode","add","@opencode-ai/plugin@0.0.0-feat/restrict-github-only-202601271151","--exact"] cwd=/Users/lteixeir/Git/opencoDE/.opencode running
+INFO  2026-01-27T11:51:56 +27ms service=plugin name=CopilotAuthPlugin loading internal plugin
+INFO  2026-01-27T11:51:56 +1ms service=bus type=* subscribing
+INFO  2026-01-27T11:51:56 +0ms service=bus type=session.updated subscribing
+INFO  2026-01-27T11:51:56 +0ms service=bus type=message.updated subscribing
+INFO  2026-01-27T11:51:56 +0ms service=bus type=message.part.updated subscribing
+INFO  2026-01-27T11:51:56 +0ms service=bus type=session.updated subscribing
+INFO  2026-01-27T11:51:56 +0ms service=bus type=message.updated subscribing
+INFO  2026-01-27T11:51:56 +0ms service=bus type=message.part.updated subscribing
+INFO  2026-01-27T11:51:56 +0ms service=bus type=session.diff subscribing
+INFO  2026-01-27T11:51:56 +0ms service=format init
+INFO  2026-01-27T11:51:56 +0ms service=bus type=file.edited subscribing
+INFO  2026-01-27T11:51:56 +0ms service=lsp serverIds=deno, typescript, vue, eslint, oxlint, biome, gopls, ruby-lsp, pyright, elixir-ls, zls, csharp, fsharp, sourcekit-lsp, rust, clangd, svelte, astro, jdtls, kotlin-ls, yaml-ls, lua-ls, php intelephense, prisma, dart, ocaml-lsp, bash, terraform, texlab, dockerfile, gleam, clojure-lsp, nixd, tinymist, haskell-language-server enabled LSP servers
+INFO  2026-01-27T11:51:56 +0ms service=file.watcher init
+INFO  2026-01-27T11:51:56 +15ms service=scheduler id=snapshot.cleanup run
+INFO  2026-01-27T11:51:56 +0ms service=scheduler id=tool.truncation.cleanup run
+INFO  2026-01-27T11:51:56 +1ms service=bus type=command.executed subscribing
+INFO  2026-01-27T11:51:56 +0ms service=file.watcher platform=darwin backend=fs-events watcher backend
+INFO  2026-01-27T11:51:56 +208ms service=server event connected
+INFO  2026-01-27T11:51:56 +2ms service=bus type=* subscribing
+INFO  2026-01-27T11:51:56 +0ms service=server status=started providers
+INFO  2026-01-27T11:51:56 +1ms service=provider status=started state
+INFO  2026-01-27T11:51:56 +11ms service=server status=completed duration=335 method=GET path=/event request
+INFO  2026-01-27T11:51:56 +0ms service=server status=completed duration=334 method=GET path=/config request
+INFO  2026-01-27T11:51:56 +1ms service=server status=completed duration=335 method=GET path=/agent request
+INFO  2026-01-27T11:51:56 +2ms service=server status=completed duration=337 method=GET path=/session request
+INFO  2026-01-27T11:51:56 +0ms service=vcs branch=feat/restrict-github-only initialized
+INFO  2026-01-27T11:51:56 +0ms service=bus type=file.watcher.updated subscribing
+INFO  2026-01-27T11:51:56 +13ms service=provider init
+ERROR 2026-01-27T11:51:56 +1ms service=provider Provider does not exist in model list anthropic
+ERROR 2026-01-27T11:51:56 +0ms service=provider Provider does not exist in model list openai
+ERROR 2026-01-27T11:51:56 +0ms service=provider Provider does not exist in model list azure
+ERROR 2026-01-27T11:51:56 +0ms service=provider Provider does not exist in model list azure-cognitive-services
+ERROR 2026-01-27T11:51:56 +0ms service=provider Provider does not exist in model list amazon-bedrock
+ERROR 2026-01-27T11:51:56 +0ms service=provider Provider does not exist in model list openrouter
+ERROR 2026-01-27T11:51:56 +0ms service=provider Provider does not exist in model list vercel
+ERROR 2026-01-27T11:51:56 +0ms service=provider Provider does not exist in model list google-vertex
+ERROR 2026-01-27T11:51:56 +0ms service=provider Provider does not exist in model list google-vertex-anthropic
+ERROR 2026-01-27T11:51:56 +0ms service=provider Provider does not exist in model list sap-ai-core
+ERROR 2026-01-27T11:51:56 +0ms service=provider Provider does not exist in model list zenmux
+ERROR 2026-01-27T11:51:56 +0ms service=provider Provider does not exist in model list gitlab
+ERROR 2026-01-27T11:51:56 +0ms service=provider Provider does not exist in model list cloudflare-ai-gateway
+ERROR 2026-01-27T11:51:56 +0ms service=provider Provider does not exist in model list cerebras
+INFO  2026-01-27T11:51:56 +0ms service=provider status=completed duration=28 state
+INFO  2026-01-27T11:51:56 +1ms service=server status=completed duration=30 providers
+INFO  2026-01-27T11:51:56 +0ms service=server status=completed duration=352 method=GET path=/provider request
+INFO  2026-01-27T11:51:56 +0ms service=server status=completed duration=352 method=GET path=/config/providers request
+INFO  2026-01-27T11:51:56 +8ms service=server method=GET path=/command request
+INFO  2026-01-27T11:51:56 +0ms service=server status=started method=GET path=/command request
+INFO  2026-01-27T11:51:56 +1ms service=mcp key=context7 type=remote found
+INFO  2026-01-27T11:51:56 +4ms service=server method=GET path=/lsp request
+INFO  2026-01-27T11:51:56 +0ms service=server status=started method=GET path=/lsp request
+INFO  2026-01-27T11:51:56 +0ms service=server status=completed duration=0 method=GET path=/lsp request
+INFO  2026-01-27T11:51:56 +0ms service=server method=GET path=/mcp request
+INFO  2026-01-27T11:51:56 +0ms service=server status=started method=GET path=/mcp request
+INFO  2026-01-27T11:51:56 +0ms service=server method=GET path=/experimental/resource request
+INFO  2026-01-27T11:51:56 +0ms service=server status=started method=GET path=/experimental/resource request
+INFO  2026-01-27T11:51:56 +0ms service=server method=GET path=/formatter request
+INFO  2026-01-27T11:51:56 +0ms service=server status=started method=GET path=/formatter request
+INFO  2026-01-27T11:51:56 +29ms service=server method=GET path=/session/status request
+INFO  2026-01-27T11:51:56 +0ms service=server status=started method=GET path=/session/status request
+INFO  2026-01-27T11:51:56 +0ms service=server status=completed duration=0 method=GET path=/session/status request
+INFO  2026-01-27T11:51:56 +0ms service=server method=GET path=/provider/auth request
+INFO  2026-01-27T11:51:56 +0ms service=server status=started method=GET path=/provider/auth request
+INFO  2026-01-27T11:51:56 +0ms service=server status=completed duration=0 method=GET path=/provider/auth request
+INFO  2026-01-27T11:51:56 +0ms service=server method=GET path=/vcs request
+INFO  2026-01-27T11:51:56 +0ms service=server status=started method=GET path=/vcs request
+INFO  2026-01-27T11:51:56 +0ms service=server status=completed duration=0 method=GET path=/vcs request
+INFO  2026-01-27T11:51:56 +1ms service=server method=GET path=/path request
+INFO  2026-01-27T11:51:56 +0ms service=server status=started method=GET path=/path request
+INFO  2026-01-27T11:51:56 +0ms service=server status=completed duration=0 method=GET path=/path request
+INFO  2026-01-27T11:51:56 +99ms service=server status=completed duration=129 method=GET path=/formatter request
+INFO  2026-01-27T11:51:56 +161ms service=bun code=1 stdout=bun add v1.3.6 (d530ed99)
+ stderr=Resolving dependencies
+Resolved, downloaded and extracted [1]
+error: No version matching "0.0.0-feat/restrict-github-only-202601271151" found for specifier "@opencode-ai/plugin" (but package exists)
+error: @opencode-ai/plugin@0.0.0-feat/restrict-github-only-202601271151 failed to resolve
+ done
+INFO  2026-01-27T11:51:56 +0ms service=bun cmd=["/Users/lteixeir/Git/opencoDE/packages/opencode/dist/opencode-darwin-arm64/bin/opencode","install"] cwd=/Users/lteixeir/Git/opencoDE/.opencode running
+INFO  2026-01-27T11:51:56 +34ms service=bun code=0 stdout=bun install v1.3.6 (d530ed99)
+
+Checked 3 installs across 4 packages (no changes) [24.00ms]
+ stderr= done
+INFO  2026-01-27T11:51:57 +258ms service=bun code=1 stdout=bun add v1.3.6 (d530ed99)
+ stderr=Resolving dependencies
+Resolved, downloaded and extracted [1]
+error: No version matching "0.0.0-feat/restrict-github-only-202601271151" found for specifier "@opencode-ai/plugin" (but package exists)
+error: @opencode-ai/plugin@0.0.0-feat/restrict-github-only-202601271151 failed to resolve
+ done
+INFO  2026-01-27T11:51:57 +0ms service=bun cmd=["/Users/lteixeir/Git/opencoDE/packages/opencode/dist/opencode-darwin-arm64/bin/opencode","install"] cwd=/Users/lteixeir/.config/opencode running
+INFO  2026-01-27T11:51:57 +29ms service=bun code=0 stdout=bun install v1.3.6 (d530ed99)
+
+Checked 3 installs across 4 packages (no changes) [22.00ms]
+ stderr= done
+INFO  2026-01-27T11:51:57 +352ms service=mcp key=context7 transport=StreamableHTTP connected
+INFO  2026-01-27T11:51:57 +384ms service=mcp key=context7 toolCount=2 create() successfully created client
+INFO  2026-01-27T11:51:57 +0ms service=server status=completed duration=1347 method=GET path=/mcp request
+ERROR 2026-01-27T11:51:58 +339ms service=mcp clientName=context7 error=MCP error -32601: Method not found failed to get prompts
+INFO  2026-01-27T11:51:58 +0ms service=server status=completed duration=1691 method=GET path=/command request
+ERROR 2026-01-27T11:51:58 +67ms service=mcp clientName=context7 error=MCP error -32601: Method not found failed to get prompts
+INFO  2026-01-27T11:51:58 +0ms service=server status=completed duration=1753 method=GET path=/experimental/resource request
+INFO  2026-01-27T11:52:11 +13698ms service=installation method=brew target=1.1.30 stdout= stderr=Warning: opencode 1.1.30 already installed
+ upgraded
+INFO  2026-01-27T11:52:12 +591ms service=bus type=installation.updated publishing
+INFO  2026-01-27T11:54:17 +124851ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T11:55:23 +66495ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T11:57:09 +105645ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T11:58:23 +74286ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T11:59:19 +56074ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:00:07 +48129ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:01:35 +87622ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:03:39 +124391ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:03:40 +85ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:04:06 +26625ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:04:32 +26247ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:04:49 +16815ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:05:19 +30097ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:05:22 +2738ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:05:22 +76ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:05:24 +2082ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:05:24 +74ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:05:27 +2502ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:05:27 +75ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:05:30 +2981ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:05:30 +73ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:05:33 +2801ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:05:33 +74ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:05:36 +3115ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:05:36 +73ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:05:38 +2152ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:05:38 +66ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:05:40 +2045ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:05:40 +74ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:05:44 +3679ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:05:44 +72ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:05:46 +2292ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:05:46 +71ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:05:49 +2673ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:05:49 +67ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:05:51 +2183ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:05:51 +73ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:07:18 +86286ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:07:18 +65ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:10:19 +181479ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:10:53 +33237ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:11:09 +16877ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:11:12 +2257ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:11:12 +72ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:11:17 +5490ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:11:17 +65ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:13:21 +123260ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:13:55 +34515ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:14:05 +9999ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:14:05 +70ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:14:08 +3143ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:14:08 +70ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:14:22 +13181ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:14:22 +78ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:14:25 +3106ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:14:25 +71ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:14:26 +1648ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:14:26 +69ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:14:28 +2007ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:14:29 +69ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:14:31 +2873ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:14:32 +76ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:14:33 +1805ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:14:33 +72ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:14:36 +2459ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:28:38 +842599ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:28:42 +3269ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:28:42 +78ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:28:44 +2162ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:28:44 +71ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:28:52 +8221ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:28:52 +66ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:28:54 +2123ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:28:55 +67ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:28:58 +3443ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:28:58 +73ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:29:10 +12049ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:29:10 +73ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:29:13 +2692ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:29:13 +70ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:31:17 +124228ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:31:50 +32613ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:31:54 +3996ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:31:54 +62ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:32:43 +48693ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:32:45 +2906ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:32:45 +69ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:32:49 +3178ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:32:49 +65ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:32:51 +2080ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:32:51 +64ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:33:19 +27771ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:33:26 +7378ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:33:26 +66ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:33:30 +3555ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:33:30 +72ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:33:32 +2727ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:33:32 +64ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:33:37 +4203ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:33:37 +65ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:33:51 +13810ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:33:51 +66ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:33:54 +2864ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:33:54 +78ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:34:05 +11626ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:34:05 +74ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:34:08 +2366ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:34:08 +65ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:34:20 +12466ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:34:20 +70ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:34:22 +2156ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:34:22 +69ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:36:27 +124054ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:36:27 +93ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:37:00 +32881ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:37:03 +3573ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:37:03 +70ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:37:05 +2052ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:37:05 +71ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:39:05 +120093ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:39:05 +1ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:39:05 +0ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:39:06 +990ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:39:06 +1ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:39:06 +0ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:39:06 +0ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:39:06 +0ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:39:08 +1609ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:39:08 +105ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:39:41 +32813ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:39:44 +2964ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:39:44 +74ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:39:55 +10605ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:39:55 +80ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:40:17 +22011ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:40:49 +31979ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:40:53 +4481ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:40:53 +70ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:40:57 +4183ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:40:57 +65ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:41:34 +36124ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:42:14 +40679ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:43:01 +47265ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:43:04 +2753ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:43:04 +62ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:44:08 +63749ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:44:15 +7015ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:44:15 +70ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:45:10 +54955ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:45:13 +3294ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:45:13 +69ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:45:37 +23728ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:45:41 +3877ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:45:41 +71ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:45:48 +6944ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:45:48 +70ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:46:01 +13379ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:46:02 +70ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:46:05 +3847ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:46:05 +68ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:46:14 +8384ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:46:14 +72ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:46:20 +5903ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:46:20 +75ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:46:23 +3284ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:46:23 +70ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:48:29 +125711ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:48:52 +22556ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:49:10 +18765ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:49:10 +76ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:49:12 +2041ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:49:12 +70ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:49:15 +2760ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:49:15 +69ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:49:17 +1830ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:49:17 +71ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:49:50 +32994ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:49:52 +2078ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:49:52 +66ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:49:54 +1906ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:49:54 +70ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:49:56 +2071ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:49:56 +70ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:49:59 +2039ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:49:59 +65ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:50:01 +2123ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:50:01 +69ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:50:12 +11556ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:50:12 +66ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:50:21 +8686ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:50:21 +67ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:50:23 +2011ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:50:23 +70ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:50:25 +2090ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:50:25 +67ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:50:28 +2546ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:50:28 +71ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:51:56 +87570ms service=models.dev file={} refreshing
+INFO  2026-01-27T12:51:56 +138ms service=scheduler id=snapshot.cleanup run
+INFO  2026-01-27T12:51:56 +1ms service=scheduler id=tool.truncation.cleanup run
+INFO  2026-01-27T12:52:43 +46976ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:52:43 +100ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:52:43 +113ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:52:43 +0ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:52:43 +0ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:52:43 +0ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:54:43 +120171ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:55:06 +23276ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:56:35 +88881ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:56:35 +52ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:56:35 +103ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:56:35 +0ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:56:35 +0ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:56:35 +0ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:58:36 +120403ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:58:36 +54ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:59:00 +23873ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:59:14 +14599ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:59:14 +77ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:59:18 +3476ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:59:18 +71ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:59:21 +3212ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:59:21 +64ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:59:44 +22646ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:59:46 +2150ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:59:46 +76ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:59:48 +2153ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:59:48 +83ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:59:55 +6712ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:59:55 +79ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:59:57 +2383ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T12:59:58 +89ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T13:00:03 +4972ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T13:00:03 +76ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T13:00:12 +9063ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T13:00:12 +186ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T13:00:12 +0ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T13:00:12 +0ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T13:00:12 +0ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T13:00:12 +0ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T13:02:12 +120368ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T13:02:47 +34793ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T13:02:50 +3191ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T13:02:50 +76ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T13:03:36 +46061ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T13:03:40 +3375ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T13:03:40 +65ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T13:03:43 +3501ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T13:03:43 +65ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T13:03:46 +2554ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T13:03:46 +92ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T13:03:49 +2513ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T13:03:49 +79ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T13:03:51 +2197ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T13:03:51 +69ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T13:04:36 +44752ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T13:04:36 +70ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T13:06:38 +122798ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T13:06:39 +108ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T13:06:41 +2533ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T13:06:41 +72ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T13:06:49 +7771ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T13:06:49 +76ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T13:06:54 +4839ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T13:06:54 +186ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T13:06:54 +0ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T13:06:54 +0ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T13:06:54 +0ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T13:06:54 +0ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T13:08:54 +120257ms service=bus type=file.watcher.updated publishing
+INFO  2026-01-27T13:08:54 +94ms service=bus type=file.watcher.updated publishing

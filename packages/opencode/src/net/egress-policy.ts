@@ -40,6 +40,15 @@ export async function fetchWithPolicy(input: RequestInfo, init?: RequestInit) {
 // This allows specific tools to make external requests even when egress is blocked.
 // Tool code SHOULD use fetchWithToolBypass only after confirming permission via ctx.ask.
 export async function fetchWithToolBypass(input: RequestInfo, init?: RequestInit) {
+  // Audit all tool-level bypass fetches so we can capture MCP/tool-driven network activity
+  try {
+    // @ts-ignore
+    const { auditRecordNoWait } = await import("../audit")
+    const url = typeof input === "string" ? input : (input as Request).url
+    auditRecordNoWait("fetch.tool.bypass", { url, time: new Date().toISOString(), egressBlocked: isEgressBlocked() })
+  } catch (e) {
+    // ignore
+  }
   // Always forward to global fetch; tool-level permission checks are the responsibility of the tool.
   // @ts-ignore
   return fetch(input, init);

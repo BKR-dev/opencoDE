@@ -65,6 +65,19 @@ export namespace Tool {
               { cause: error },
             )
           }
+          // wrap ctx.ask to audit permission checks
+          try {
+            const originalAsk = ctx.ask
+            ctx.ask = async (input) => {
+              try {
+                const { auditRecordNoWait } = await import("../audit")
+                auditRecordNoWait("tool.ask", { tool: id, sessionID: ctx.sessionID, permission: input.permission, patterns: input.patterns, metadata: input.metadata, time: new Date().toISOString() })
+              } catch (e) {}
+              return originalAsk(input)
+            }
+          } catch (e) {
+            // ignore
+          }
           const result = await execute(args, ctx)
           // skip truncation for tools that handle it themselves
           if (result.metadata.truncated !== undefined) {

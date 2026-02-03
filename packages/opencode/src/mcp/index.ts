@@ -28,6 +28,21 @@ export namespace MCP {
   const log = Log.create({ service: "mcp" })
   const DEFAULT_TIMEOUT = 30_000
 
+  // Safe client name extractor for auditing
+  function clientNameSafe(client: MCPClient | unknown) {
+    try {
+      if (!client) return "unknown"
+      // @ts-ignore
+      if (typeof (client as any).name === "string" && (client as any).name.length > 0) return (client as any).name
+      // @ts-ignore
+      if ((client as any)?.transport?.baseUrl) return String((client as any).transport.baseUrl)
+      return "mcp-client"
+    } catch (e) {
+      return "mcp-client"
+    }
+  }
+
+
   export const Resource = z
     .object({
       name: z.string(),
@@ -132,6 +147,14 @@ export namespace MCP {
       description: mcpTool.description ?? "",
       inputSchema: jsonSchema(schema),
       execute: async (args: unknown) => {
+        // Audit MCP tool call
+        try {
+          // @ts-ignore - audit module provides no types here
+          const { auditRecordNoWait } = await import("../audit")
+          auditRecordNoWait("mcp.tool.call", { client: clientNameSafe(client), tool: mcpTool.name, args: args, time: new Date().toISOString() })
+        } catch (e) {
+          // ignore audit failures
+        }
         return client.callTool(
           {
             name: mcpTool.name,

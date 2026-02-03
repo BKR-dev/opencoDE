@@ -1,0 +1,5 @@
+INFO  2026-01-27T11:51:55 +485ms service=default version=0.0.0-feat/restrict-github-only-202601271151 args=[] opencode
+INFO  2026-01-27T11:51:55 +1ms service=config path=/Users/lteixeir/.config/opencode/config.json loading
+INFO  2026-01-27T11:51:55 +1ms service=config path=/Users/lteixeir/.config/opencode/opencode.json loading
+INFO  2026-01-27T11:51:55 +10ms service=config path=/Users/lteixeir/.config/opencode/opencode.jsonc loading
+INFO  2026-01-27T12:51:55 +3599531ms service=models.dev file={} refreshing
