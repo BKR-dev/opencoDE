@@ -39,17 +39,24 @@ export default {
       }
       console.log(JSON.stringify(metrics, null, 2))
 
-      const ret = await fetch("https://api.honeycomb.io/1/events/zen", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Honeycomb-Event-Time": (event.eventTimestamp ?? Date.now()).toString(),
-          "X-Honeycomb-Team": Resource.HONEYCOMB_API_KEY.value,
-        },
-        body: JSON.stringify(metrics),
-      })
-      console.log(ret.status)
-      console.log(await ret.text())
+      // GDPR COMPLIANCE: Honeycomb analytics disabled
+      // Reason: Sends geolocation (latitude, longitude, city, region) and IP addresses
+      // to USA-based service without user consent, violating GDPR Art. 6, 7, 44-50.
+      //
+      // Alternative: Implement local logging with privacy-preserving aggregation
+      // or obtain explicit opt-in consent before re-enabling.
+      //
+      // const ret = await fetch("https://api.honeycomb.io/1/events/zen", {
+      //   method: "POST",
+      //   headers: {
+      //     "Content-Type": "application/json",
+      //     "X-Honeycomb-Event-Time": (event.eventTimestamp ?? Date.now()).toString(),
+      //     "X-Honeycomb-Team": Resource.HONEYCOMB_API_KEY.value,
+      //   },
+      //   body: JSON.stringify(metrics),
+      // })
+      // console.log(ret.status)
+      // console.log(await ret.text())
     }
   },
 }

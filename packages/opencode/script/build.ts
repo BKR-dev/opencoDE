@@ -14,10 +14,12 @@ process.chdir(dir)
 
 import pkg from "../package.json"
 import { Script } from "@opencode-ai/script"
+import { getBuildConfig, toBuildDefines } from "./gdpr-config"
 
 const singleFlag = process.argv.includes("--single")
 const baselineFlag = process.argv.includes("--baseline")
 const skipInstall = process.argv.includes("--skip-install")
+const gdprConfig = getBuildConfig()
 
 const allTargets: {
   os: string
@@ -114,9 +116,23 @@ for (const item of targets) {
     item.arch,
     item.avx2 === false ? "baseline" : undefined,
     item.abi === undefined ? undefined : item.abi,
+    // Add GDPR suffix for GDPR-hardened builds
+    gdprConfig.OPENCODE_BUILD_MODE !== "standard" ? "gdpr" : undefined,
   ]
     .filter(Boolean)
     .join("-")
+
+  // Create a target name without the GDPR suffix for Bun.build
+  const targetName = [
+    pkg.name,
+    item.os === "win32" ? "windows" : item.os,
+    item.arch,
+    item.avx2 === false ? "baseline" : undefined,
+    item.abi === undefined ? undefined : item.abi,
+  ]
+    .filter(Boolean)
+    .join("-")
+
   console.log(`building ${name}`)
   await $`mkdir -p dist/${name}/bin`
 
@@ -138,7 +154,7 @@ for (const item of targets) {
       //@ts-ignore (bun types aren't up to date)
       autoloadTsconfig: true,
       autoloadPackageJson: true,
-      target: name.replace(pkg.name, "bun") as any,
+      target: targetName.replace(pkg.name, "bun") as any,
       outfile: `dist/${name}/bin/opencode`,
       execArgv: [`--user-agent=opencode/${Script.version}`, "--use-system-ca", "--"],
       windows: {},
@@ -150,6 +166,8 @@ for (const item of targets) {
       OPENCODE_WORKER_PATH: workerPath,
       OPENCODE_CHANNEL: `'${Script.channel}'`,
       OPENCODE_LIBC: item.os === "linux" ? `'${item.abi ?? "glibc"}'` : "",
+      // GDPR build-time constants (tamper-proof)
+      ...toBuildDefines(gdprConfig),
     },
   })
 

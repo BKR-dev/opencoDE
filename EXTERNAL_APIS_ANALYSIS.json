@@ -1,0 +1,361 @@
+{
+  "status": "done",
+  "summary": "OpenCode application makes external API calls to 6 major service categories: models metadata (models.dev), code/web search (Exa MCP), analytics (Honeycomb), session sharing (api.opencode.ai), GitHub integration (api.github.com), and authentication (GitHub OAuth). All external egress is controlled via OPENCODE_BLOCK_EXTERNAL_APIS and OPENCODE_ONLY_GITHUB flags with a strict allowlist.",
+  "external_apis": [
+    {
+      "name": "models.dev",
+      "purpose": "Fetch AI model metadata and pricing information (all available providers, models, capabilities, costs)",
+      "endpoints": ["https://models.dev/api.json"],
+      "locations": [
+        "packages/opencode/src/provider/models.ts:135",
+        "packages/opencode/src/provider/models.ts:170",
+        "packages/opencode/src/provider/models.ts:207"
+      ],
+      "required": "conditional",
+      "refresh_interval": "60 minutes",
+      "gdpr_concern": "Retrieves public model metadata; no user data transmitted. Can be disabled with OPENCODE_ONLY_GITHUB or OPENCODE_DISABLE_MODELS_FETCH flag.",
+      "configurable": true,
+      "env_override": "OPENCODE_MODELS_URL"
+    },
+    {
+      "name": "Exa AI - Web Search (MCP)",
+      "purpose": "Provides websearch tool capability via Model Context Protocol (MCP). Searches the web and returns relevant content.",
+      "endpoints": ["https://mcp.exa.ai/mcp (POST: web_search_exa tool)"],
+      "locations": ["packages/opencode/src/tool/websearch.ts:8", "packages/opencode/src/tool/websearch.ts:102-140"],
+      "required": "conditional",
+      "timeout": "25 seconds",
+      "gdpr_concern": "Transmits user search queries to Exa AI. Subject to user permission via ctx.ask(). Blocked in GitHub-only mode. Audit logged when used.",
+      "permission_model": "tool-based permission with audit trail"
+    },
+    {
+      "name": "Exa AI - Code Search (MCP)",
+      "purpose": "Provides codesearch tool to find relevant code context, APIs, libraries, and SDK examples via Model Context Protocol.",
+      "endpoints": ["https://mcp.exa.ai/mcp (POST: get_code_context_exa tool)"],
+      "locations": ["packages/opencode/src/tool/codesearch.ts:7", "packages/opencode/src/tool/codesearch.ts:86"],
+      "required": "conditional",
+      "timeout": "30 seconds",
+      "gdpr_concern": "Transmits search queries to Exa AI. Subject to user permission. Blocked in GitHub-only mode. Audit logged.",
+      "permission_model": "tool-based permission with audit trail"
+    },
+    {
+      "name": "Honeycomb Analytics",
+      "purpose": "Sends metrics and analytics for AI model completions (chat, messages, responses) to Honeycomb for monitoring and observability.",
+      "endpoints": ["https://api.honeycomb.io/1/events/zen (POST)"],
+      "locations": ["packages/console/function/src/log-processor.ts:42"],
+      "required": "conditional",
+      "gdpr_concern": "HIGH - Transmits request metadata including: Cloudflare geolocation (continent, country, city, region, latitude, longitude, timezone), request length, response status, IP address, response duration. No direct user PII but location data is precise. Token: HONEYCOMB_API_KEY (from Resource.HONEYCOMB_API_KEY.value)",
+      "data_transmitted": [
+        "event_type",
+        "cf.continent",
+        "cf.country",
+        "cf.city",
+        "cf.region",
+        "cf.latitude",
+        "cf.longitude",
+        "cf.timezone",
+        "duration",
+        "request_length",
+        "status",
+        "ip",
+        "custom_metrics"
+      ],
+      "triggered_by": "POST requests to /zen/v1/* endpoints"
+    },
+    {
+      "name": "api.opencode.ai (Share Sync)",
+      "purpose": "Synchronizes session data (messages, state, metadata) to Opencode cloud service for session sharing and persistence.",
+      "endpoints": [
+        "https://api.opencode.ai/share_create (POST)",
+        "https://api.opencode.ai/share_sync (POST)",
+        "https://api.opencode.ai/share_delete (POST)",
+        "https://api.dev.opencode.ai/* (preview/local)"
+      ],
+      "locations": [
+        "packages/opencode/src/share/share.ts:29",
+        "packages/opencode/src/share/share.ts:77",
+        "packages/opencode/src/share/share.ts:87"
+      ],
+      "required": "conditional",
+      "preview_url": "https://api.dev.opencode.ai",
+      "gdpr_concern": "HIGH - Transmits full session data (messages, context, code, reasoning) to remote server. Requires explicit sharing decision from user. Can be disabled with OPENCODE_DISABLE_SHARE=true.",
+      "data_transmitted": ["sessionID", "secret (share key)", "session info (messages, state, metadata)"],
+      "configurable": true,
+      "env_override": "OPENCODE_API, OPENCODE_DISABLE_SHARE"
+    },
+    {
+      "name": "GitHub API",
+      "purpose": "Multiple functions: OAuth authentication, fetching user emails, user profile data, GitHub Actions integration, PR/issue queries.",
+      "endpoints": [
+        "https://api.github.com/user (GET - fetch profile)",
+        "https://api.github.com/user/emails (GET - fetch verified emails)",
+        "https://api.github.com/repos/{owner}/{repo}/... (GraphQL/REST)",
+        "https://api.opencode.ai/exchange_github_app_token (POST - GitHub App token exchange)",
+        "https://api.opencode.ai/exchange_github_app_token_with_pat (POST - mock/testing)"
+      ],
+      "locations": [
+        "packages/console/function/src/auth.ts:86-96 (user emails)",
+        "packages/console/function/src/auth.ts:97-105 (user profile)",
+        "github/index.ts:175-205 (token exchange)",
+        "github/index.ts:283-320 (GraphQL queries)"
+      ],
+      "required": "yes",
+      "gdpr_concern": "CRITICAL - Requests OAuth scope 'read:user', 'user:email', 'repo'. Transmits user email, profile data, and GitHub tokens. Used for authentication and GitHub Actions integration.",
+      "authentication": "OAuth 2.0 (GitHub Copilot provider)",
+      "data_transmitted": [
+        "OAuth token",
+        "user email",
+        "user profile (login, name)",
+        "repository data (PR/issue content, diffs, comments)"
+      ],
+      "scopes": ["read:user", "user:email"]
+    },
+    {
+      "name": "Google OAuth (Authentication)",
+      "purpose": "OAuth provider for user authentication in console application.",
+      "endpoints": ["Google OAuth endpoints (via @openauthjs/openauth)"],
+      "locations": ["packages/console/function/src/auth.ts:51-54"],
+      "required": "conditional",
+      "gdpr_concern": "CRITICAL - Google OAuth authentication. Transmits user email and profile data. Token: GOOGLE_CLIENT_ID (from Resource.GOOGLE_CLIENT_ID.value)",
+      "authentication": "OAuth 2.0 (OpenID Connect)",
+      "scopes": ["openid", "email"]
+    },
+    {
+      "name": "GitHub App Token Exchange",
+      "purpose": "Exchange GitHub App token or OIDC token for OpenCode service token in GitHub Actions context.",
+      "endpoints": [
+        "https://api.opencode.ai/exchange_github_app_token (POST - production)",
+        "https://api.opencode.ai/exchange_github_app_token_with_pat (POST - mock)"
+      ],
+      "locations": ["github/index.ts:175-205"],
+      "required": "conditional",
+      "context": "GitHub Actions workflow integration",
+      "gdpr_concern": "Transmits GitHub OIDC token or access token to Opencode service for authentication in CI/CD pipelines.",
+      "data_transmitted": ["GitHub OIDC token or PAT", "Authorization header"]
+    },
+    {
+      "name": "GitHub App Installation Query",
+      "purpose": "Query Opencode API to get GitHub App installation details for a specific repository.",
+      "endpoints": ["https://api.opencode.ai/get_github_app_installation?owner={owner}&repo={repo}"],
+      "locations": ["packages/opencode/src/cli/cmd/github.ts:358"],
+      "required": "conditional",
+      "gdpr_concern": "Queries installation details; may reveal repository ownership and installation status.",
+      "data_transmitted": ["owner", "repo"]
+    },
+    {
+      "name": "Custom Instructions Fetch",
+      "purpose": "Dynamically fetch instruction files from URLs specified in opencode.json configuration.",
+      "endpoints": ["User-specified URLs (http:// or https://)"],
+      "locations": ["packages/opencode/src/session/system.ts:148-152"],
+      "required": "conditional",
+      "timeout": "5 seconds",
+      "gdpr_concern": "User-controlled. Fetches arbitrary URLs specified in config. Can expose user config URLs in error logs.",
+      "user_controlled": true,
+      "configurable": true,
+      "config_field": "instructions"
+    },
+    {
+      "name": "Stripe Webhook Handler",
+      "purpose": "Receive and process Stripe payment webhooks for subscription management.",
+      "endpoints": ["Inbound only: receives POST from Stripe webhooks"],
+      "locations": ["packages/console/app/src/routes/stripe/webhook.ts"],
+      "required": "conditional",
+      "direction": "inbound",
+      "gdpr_concern": "Receives payment and subscription data from Stripe. May include customer email and billing information."
+    }
+  ],
+  "network_requests": {
+    "fetch_calls": [
+      "packages/opencode/src/provider/models.ts:135 - models.dev/api.json",
+      "packages/opencode/src/provider/models.ts:170 - models.dev/api.json",
+      "packages/opencode/src/provider/models.ts:207 - models.dev refresh",
+      "packages/opencode/src/session/system.ts:148-152 - custom instruction URLs",
+      "packages/console/function/src/auth.ts:86 - api.github.com/user/emails",
+      "packages/console/function/src/auth.ts:97 - api.github.com/user",
+      "packages/console/function/src/log-processor.ts:42 - api.honeycomb.io/1/events/zen",
+      "packages/opencode/src/share/share.ts:29 - {OPENCODE_API}/share_sync",
+      "packages/opencode/src/share/share.ts:77 - {OPENCODE_API}/share_create",
+      "packages/opencode/src/share/share.ts:87 - {OPENCODE_API}/share_delete",
+      "packages/opencode/src/tool/websearch.ts:102 - mcp.exa.ai/mcp (MCP tool)",
+      "packages/opencode/src/tool/codesearch.ts:86 - mcp.exa.ai/mcp (MCP tool)",
+      "packages/opencode/src/tool/webfetch.ts:56 - user-specified URL (webfetch tool)",
+      "github/index.ts:175 - api.opencode.ai/exchange_github_app_token",
+      "github/index.ts:185 - api.opencode.ai/exchange_github_app_token_with_pat",
+      "github/index.ts:283 - GitHub GraphQL queries",
+      "packages/opencode/src/cli/cmd/github.ts:358 - api.opencode.ai/get_github_app_installation",
+      "sdks/vscode/src/extension.ts:85 - http://localhost:{port}/app (dev only)",
+      "sdks/vscode/src/extension.ts:103 - http://localhost:{port}/tui/append-prompt (dev only)"
+    ],
+    "http_clients": [
+      "Global Fetch API (Bun)",
+      "@openauthjs/openauth (GitHub & Google OAuth providers)",
+      "@octokit/rest (GitHub REST API)",
+      "@octokit/graphql (GitHub GraphQL API)"
+    ],
+    "websocket_connections": [
+      "No direct WebSocket usage detected. MCP (Model Context Protocol) uses JSON-RPC over HTTP POST."
+    ]
+  },
+  "egress_policy": {
+    "implementation": "Strict allowlist-based egress control via OPENCODE_BLOCK_EXTERNAL_APIS and OPENCODE_ONLY_GITHUB environment variables",
+    "allowlist": ["api.github.com", "raw.githubusercontent.com", "localhost", "127.0.0.1"],
+    "blocklist": ["All domains NOT in allowlist when OPENCODE_BLOCK_EXTERNAL_APIS=1 or OPENCODE_ONLY_GITHUB=1"],
+    "enforcement": "fetchWithPolicy() wrapper enforces allowlist. hostAllowed() validates URLs. Blocked package installs prevented via packageAllowed(). Audit trail recorded for all violations.",
+    "control_functions": [
+      "isEgressBlocked() - returns true if OPENCODE_BLOCK_EXTERNAL_APIS or OPENCODE_ONLY_GITHUB set",
+      "hostAllowed(url) - validates URL hostname against ALLOWED_DOMAINS",
+      "fetchWithPolicy(input, init) - enforces policy on fetch() calls",
+      "fetchWithToolBypass(input, init) - allows specific tools (webfetch, websearch, codesearch) to bypass egress block with permission check",
+      "packageAllowed(pkg) - validates package names against ALLOWED_PACKAGES"
+    ],
+    "special_cases": [
+      "Tools (webfetch, websearch, codesearch) can bypass egress block after permission check via fetchWithToolBypass()",
+      "Only @ai-sdk/github-copilot provider is allowed to install when egress is blocked",
+      "GitHub-only mode (OPENCODE_ONLY_GITHUB) returns minimal github-copilot manifest without network fetch"
+    ],
+    "location": "packages/opencode/src/net/egress-policy.ts"
+  },
+  "recommendations": [
+    {
+      "issue": "Honeycomb analytics sends precise geolocation data (country, city, coordinates, timezone)",
+      "action": "Implement: 1) User consent for analytics, 2) Geohash instead of precise coordinates, 3) Ability to disable HONEYCOMB_API_KEY via config, 4) Documentation of what data is transmitted",
+      "priority": "high",
+      "gdpr_implication": "Precise location data may require explicit GDPR consent in EU"
+    },
+    {
+      "issue": "Session sharing transmits full conversation context including code and reasoning to remote API",
+      "action": "Implement: 1) Encrypted transmission to api.opencode.ai, 2) Clear user warning about data transmission, 3) Option to encrypt shares client-side, 4) Data retention policy disclosure",
+      "priority": "high",
+      "gdpr_implication": "User data transit across network without explicit user action requires privacy policy"
+    },
+    {
+      "issue": "Custom instruction URLs can be arbitrary, potentially exposing internal network URLs in errors",
+      "action": "Implement: 1) URL scheme validation, 2) Error sanitization to not expose full URLs in logs, 3) Whitelist of allowed domains for instructions, 4) Timeout enforcement",
+      "priority": "medium"
+    },
+    {
+      "issue": "GitHub OAuth requests scopes that grant access to private repositories (implied by repo scope)",
+      "action": "Implement: 1) Document minimum required scopes, 2) Request only necessary scopes (read:user, user:email), 3) Add scope warning in UI, 4) Rotate tokens regularly",
+      "priority": "medium",
+      "gdpr_implication": "Broad OAuth scopes could grant unintended access to user data"
+    },
+    {
+      "issue": "No explicit audit logging of fetch calls outside of tool bypass",
+      "action": "Implement: 1) Audit trail for all external API calls, 2) Log queries sent to models.dev and Exa AI, 3) Retention policy (e.g., 90 days), 4) User access to audit logs",
+      "priority": "medium"
+    },
+    {
+      "issue": "Egress policy relies on environment variables that could be forgotten/misconfigured",
+      "action": "Implement: 1) Default to OPENCODE_BLOCK_EXTERNAL_APIS=true in offline/air-gapped deployments, 2) Log warning on startup listing all external APIs available, 3) Config file validation to warn about egress",
+      "priority": "medium"
+    },
+    {
+      "issue": "Exa AI (websearch, codesearch) endpoints are hardcoded and require external API key not visible in code",
+      "action": "Implement: 1) Document where Exa API key is configured, 2) Add health check for Exa endpoints, 3) Graceful fallback when Exa unavailable",
+      "priority": "low"
+    },
+    {
+      "issue": "GitHub Actions GitHub App token exchange is not rate-limited",
+      "action": "Implement: 1) Rate limiting on token exchange endpoint, 2) Logging of token exchanges with user/workflow ID, 3) Token expiration/revocation mechanism",
+      "priority": "medium",
+      "security_implication": "Potential for token abuse in automated workflows"
+    },
+    {
+      "issue": "Honeycomb API key and other service credentials stored in Resource objects",
+      "action": "Implement: 1) Audit who has access to Resource values, 2) Rotate credentials regularly, 3) Use short-lived tokens, 4) Document credential rotation process",
+      "priority": "high",
+      "security_implication": "Leaked credentials could expose analytics/service access"
+    },
+    {
+      "issue": "No circuit breaker pattern for external API dependencies (models.dev, Exa AI, Honeycomb)",
+      "action": "Implement: 1) Circuit breakers for all external APIs with fallback behavior, 2) Graceful degradation when services unavailable, 3) Service health dashboard",
+      "priority": "low",
+      "operational_implication": "Service outages could impact user experience"
+    }
+  ],
+  "notes": [
+    "OpenCode has well-implemented egress controls via OPENCODE_BLOCK_EXTERNAL_APIS and OPENCODE_ONLY_GITHUB flags suitable for air-gapped/GitHub-only deployments",
+    "GitHub-only mode (OPENCODE_ONLY_GITHUB) restricts to GitHub Copilot provider and disables webfetch/websearch/codesearch tools - good for sensitive environments",
+    "User data transmission is significant: session sharing sends full conversation context, Honeycomb sends precise geolocation, GitHub OAuth accesses user emails/profile",
+    "Audit logging is partially implemented (webfetch/websearch/codesearch have audit trails) but missing for other external calls (models.dev, share sync)",
+    "All external API URLs are centralized and configurable via environment variables (OPENCODE_API, OPENCODE_MODELS_URL), enabling self-hosted deployments",
+    "Exa AI integration (websearch, codesearch) is tool-based and permission-gated - users must explicitly grant permission to use these features",
+    "No telemetry/analytics SDK detected (Honeycomb is server-side only in log processor, not in client)",
+    "VCS detection (git-specific) is read-only and doesn't transmit repo data automatically - only when user initiates GitHub Actions workflow",
+    "Plugin system exists but no evidence of automatic plugin updates/downloads from external sources - plugins specified in config or local files",
+    "Model metadata fetch (models.dev) happens on startup and every 60 minutes, critical for provider availability. Can be cached/disabled with OPENCODE_DISABLE_MODELS_FETCH"
+  ],
+  "files_analyzed": [
+    "packages/opencode/src/provider/models.ts",
+    "packages/opencode/src/provider/provider.ts",
+    "packages/opencode/src/session/system.ts",
+    "packages/opencode/src/config/config.ts",
+    "packages/opencode/src/net/egress-policy.ts",
+    "packages/opencode/src/tool/webfetch.ts",
+    "packages/opencode/src/tool/websearch.ts",
+    "packages/opencode/src/tool/codesearch.ts",
+    "packages/opencode/src/share/share.ts",
+    "packages/console/function/src/auth.ts",
+    "packages/console/function/src/log-processor.ts",
+    "github/index.ts",
+    "sdks/vscode/src/extension.ts",
+    "packages/opencode/src/global/index.ts"
+  ],
+  "execution_log": [
+    {
+      "timestamp": "2025-02-04T00:00:00Z",
+      "action": "search",
+      "target": "fetch() calls in codebase",
+      "status": "ok",
+      "findings": "22 fetch locations identified across models, auth, sharing, tools, and analytics"
+    },
+    {
+      "timestamp": "2025-02-04T00:00:01Z",
+      "action": "read",
+      "file": "packages/opencode/src/provider/models.ts",
+      "status": "ok",
+      "findings": "models.dev API integration, 60-min refresh interval, models.json cache"
+    },
+    {
+      "timestamp": "2025-02-04T00:00:02Z",
+      "action": "read",
+      "file": "packages/opencode/src/net/egress-policy.ts",
+      "status": "ok",
+      "findings": "Comprehensive egress control with allowlist, blockingFlags, audit trail"
+    },
+    {
+      "timestamp": "2025-02-04T00:00:03Z",
+      "action": "read",
+      "file": "packages/opencode/src/tool/websearch.ts",
+      "status": "ok",
+      "findings": "Exa AI MCP integration, tool-gated permission model, 25sec timeout"
+    },
+    {
+      "timestamp": "2025-02-04T00:00:04Z",
+      "action": "read",
+      "file": "packages/console/function/src/log-processor.ts",
+      "status": "ok",
+      "findings": "Honeycomb analytics with precise geolocation data (lat/lon/timezone)"
+    },
+    {
+      "timestamp": "2025-02-04T00:00:05Z",
+      "action": "read",
+      "file": "packages/opencode/src/share/share.ts",
+      "status": "ok",
+      "findings": "Session sharing API calls, configurable endpoint, disable flag available"
+    },
+    {
+      "timestamp": "2025-02-04T00:00:06Z",
+      "action": "read",
+      "file": "github/index.ts",
+      "status": "ok",
+      "findings": "GitHub API usage for auth, PR/issue queries, token exchange"
+    },
+    {
+      "timestamp": "2025-02-04T00:00:07Z",
+      "action": "search",
+      "target": "Environment variables controlling egress",
+      "status": "ok",
+      "findings": "OPENCODE_BLOCK_EXTERNAL_APIS, OPENCODE_ONLY_GITHUB, OPENCODE_MODELS_URL, OPENCODE_API, OPENCODE_DISABLE_SHARE"
+    }
+  ]
+}

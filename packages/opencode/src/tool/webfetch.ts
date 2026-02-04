@@ -4,6 +4,7 @@ import TurndownService from "turndown"
 import DESCRIPTION from "./webfetch.txt"
 import { fetchWithToolBypass } from "../net/egress-policy"
 import { auditRecordNoWait } from "../audit"
+import { isGitHubOnlyMode } from "../gdpr/build-constants"
 
 const MAX_RESPONSE_SIZE = 5 * 1024 * 1024 // 5MB
 const DEFAULT_TIMEOUT = 30 * 1000 // 30 seconds
@@ -11,7 +12,7 @@ const MAX_TIMEOUT = 120 * 1000 // 2 minutes
 
 export const WebFetchTool = Tool.define("webfetch", {
   async execute(params, ctx) {
-    if (process.env.OPENCODE_ONLY_GITHUB) throw new Error("webfetch tool disabled in GitHub-only mode")
+    if (isGitHubOnlyMode()) throw new Error("webfetch tool disabled in GitHub-only mode")
 
     // Validate URL
     if (!params.url.startsWith("http://") && !params.url.startsWith("https://")) {
@@ -51,7 +52,14 @@ export const WebFetchTool = Tool.define("webfetch", {
           "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8"
     }
 
-    await auditRecordNoWait("tool.webfetch.request", { sessionID: ctx.sessionID, agent: ctx.agent, url: params.url, format: params.format, egressBlocked: process.env.OPENCODE_ONLY_GITHUB ? true : false, time: new Date().toISOString() })
+    await auditRecordNoWait("tool.webfetch.request", {
+      sessionID: ctx.sessionID,
+      agent: ctx.agent,
+      url: params.url,
+      format: params.format,
+      egressBlocked: isGitHubOnlyMode(),
+      time: new Date().toISOString(),
+    })
 
     const response = await fetchWithToolBypass(params.url, {
       signal: AbortSignal.any([controller.signal, ctx.abort]),
@@ -142,7 +150,6 @@ export const WebFetchTool = Tool.define("webfetch", {
       .describe("The format to return the content in (text, markdown, or html). Defaults to markdown."),
     timeout: z.number().describe("Optional timeout in seconds (max 120)").optional(),
   }),
-
 })
 
 async function extractTextFromHTML(html: string) {

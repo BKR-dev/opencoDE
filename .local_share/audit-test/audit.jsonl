@@ -1,0 +1,10 @@
+{"ts":"2026-02-04T13:33:05.207Z","event":"test.event","details":{"foo":"bar","timestamp":"2026-02-04T13:33:05.207Z"}}
+{"ts":"2026-02-04T13:33:05.210Z","event":"event.1","details":{"data":"first"}}
+{"ts":"2026-02-04T13:33:05.213Z","event":"event.2","details":{"data":"second"}}
+{"ts":"2026-02-04T13:33:05.392Z","event":"event.3","details":{"data":"third"}}
+{"ts":"2026-02-04T13:33:05.404Z","event":"test.event","details":{"data":"should not throw"}}
+{"ts":"2026-02-04T13:33:05.508Z","event":"multi.location","details":{"test":true}}
+{"ts":"2026-02-04T13:33:05.521Z","event":"tool.websearch.request","details":{"query":"test","sessionID":"s1"}}
+{"ts":"2026-02-04T13:33:05.528Z","event":"tool.webfetch.request","details":{"url":"https://example.com","sessionID":"s2"}}
+{"ts":"2026-02-04T13:33:05.533Z","event":"mcp.tool.call","details":{"tool":"test-tool","args":{}}}
+{"ts":"2026-02-04T13:33:05.554Z","event":"timestamp.test","details":{"data":"check timestamp"}}

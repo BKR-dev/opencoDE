@@ -1,0 +1,159 @@
+{
+  "status": "done",
+  "summary": "Comprehensive GDPR compliance assessment for OpenCode AI assistant. Multiple critical and high-severity gaps identified across data handling, consent, transparency, audit logging, and third-party processor requirements. Immediate action required for European market deployment.",
+  "gdpr_requirements": {
+    "data_minimization": "Art. 5(1)(c) - Personal data must be adequate, relevant and limited to what is necessary (purpose limitation and storage limitation principles). For AI coding assistants, only essential code snippets, user identifiers, and interaction metadata should be collected; training data, prompts, and code must be pseudonymized or anonymized where possible.",
+    "audit_logging": "Art. 30 - Controllers must maintain records of all processing activities including: (1) what personal data is collected, (2) who accesses it, (3) external transfers/third parties involved, (4) data retention periods, (5) technical/organizational security measures. Must be available to supervisory authorities on demand. Art. 33 requires breach notification within 72 hours.",
+    "third_party_processors": "Art. 28 - If external LLM providers (OpenAI, Anthropic, etc.) process personal data, must have explicit Data Processing Agreements (DPAs) specifying: (1) permitted uses, (2) data security obligations, (3) confidentiality terms, (4) subprocessor management, (5) EU adequacy status. Controller remains liable for processor compliance.",
+    "user_consent": "Art. 6(1)(a) and Art. 7 - Processing requires lawful basis. Consent must be: (1) freely given (not bundled with essential services), (2) specific (per use case), (3) informed (clear explanation), (4) unambiguous (clear affirmative action). Must demonstrate ability to withdraw consent easily. Consent is recordable/auditable.",
+    "transparency": "Art. 13 & 14 - Users must be informed AT COLLECTION of: (1) controller identity and contact, (2) processing purposes and legal basis, (3) retention period, (4) right to access/rectification/erasure, (5) right to complaint, (6) whether data goes to third countries, (7) if automated decision-making is used with legal effects. Information must be clear, concise, intelligible."
+  },
+  "current_compliance": {
+    "strengths": [
+      "Provider abstraction layer exists (Provider, ProviderTransform) enabling flexibility in model selection and audit tracking",
+      "Session-based architecture allows per-user data isolation and potential audit trail implementation",
+      "TypeScript type system enables data schema validation and structured logging",
+      "Modular architecture allows incremental compliance implementation without redesign",
+      "No apparent forced data sharing or embedding of user data in training pipelines by default"
+    ],
+    "gaps": [
+      {
+        "requirement": "Art. 5 (Data Minimization) & Art. 30 (Audit Records)",
+        "gap": "No central audit logging system found. No record of what personal data flows through system, where it goes, who accesses it, or retention schedules. Cannot demonstrate compliance with accountability principle.",
+        "severity": "critical",
+        "recommendation": "Implement centralized audit logging middleware in session/processor layer. Log: (1) user ID + timestamp, (2) provider ID + model used, (3) data classification (PII/sensitive vs. general), (4) API calls and responses (non-sensitive metadata only), (5) access patterns. Store logs with tamper-proofing and retention policy enforcement."
+      },
+      {
+        "requirement": "Art. 6 (Lawfulness) & Art. 7 (Consent)",
+        "gap": "No explicit consent mechanism found. Unclear how OpenCode obtains permission to process user code/prompts, particularly when sent to third-party LLM providers. No consent withdrawal mechanism.",
+        "severity": "critical",
+        "recommendation": "Implement consent module: (1) On first use, display comprehensive consent dialog (separate toggles for: local processing, external API calls, training data usage, analytics). (2) Store consent records with timestamp and version. (3) Provide per-user consent dashboard to view/modify/withdraw consent. (4) Require re-consent when privacy policy changes. (5) Default to minimal consent (no external calls) unless explicitly approved."
+      },
+      {
+        "requirement": "Art. 13 (Transparency - Information to Users)",
+        "gap": "No privacy notice, data processing explanation, or user-facing transparency information found. Users may not know their code is sent to external AI providers or how long it is retained.",
+        "severity": "critical",
+        "recommendation": "Create and display privacy notice covering: (1) What data is collected (code snippets, prompts, metadata), (2) Who processes it (list providers: OpenAI, Anthropic, etc. with links to their privacy policies), (3) How long it's kept (per provider), (4) Rights (access, deletion, complaint), (5) Legal basis (consent, legitimate interest). Display in UI and include in terms of service."
+      },
+      {
+        "requirement": "Art. 28 (Data Processing Agreements with Third Parties)",
+        "gap": "No evidence of Data Processing Agreements (DPAs) with external LLM providers. No mechanism to validate processor compliance or ensure adequate safeguards for data transfers.",
+        "severity": "critical",
+        "recommendation": "Audit all external integrations (OpenAI, Anthropic, GitHub Copilot, etc.) for DPA coverage. For each provider: (1) Obtain executed DPA or verify Standard Contractual Clauses (SCCs), (2) Document data flows and permitted purposes, (3) Verify EU Adequacy or SCCs for non-EU processors, (4) Implement processor list in Art. 30 records. Require DPA before enabling provider."
+      },
+      {
+        "requirement": "Art. 17 (Right to Erasure/DPIA) & Art. 35 (Data Protection Impact Assessment)",
+        "gap": "No data deletion/rectification mechanisms found. Users cannot easily delete their data from OpenCode or request erasure from external providers. No DPIA conducted for high-risk processing (automated decision-making on code, profiling).",
+        "severity": "high",
+        "recommendation": "Implement: (1) User data deletion API (soft-delete with audit trail, hard-delete with retention period). (2) Right to rectification UI. (3) Conduct DPIA per Art. 35 for: AI-assisted code generation (Art. 22 automated decisions), any analytics/profiling, external API usage. Document findings in compliance repository."
+      },
+      {
+        "requirement": "Art. 32 (Security of Processing)",
+        "gap": "No evidence of encryption in transit/at rest for code snippets sent to external providers. No mention of access controls, incident response, or security certifications.",
+        "severity": "high",
+        "recommendation": "Implement: (1) TLS 1.3+ for all external API calls. (2) End-to-end encryption option for code sent to external providers (client-side encryption, server retains only ciphertext). (3) Role-based access control (RBAC) for internal data access. (4) Incident response plan with 72-hour breach notification procedure. (5) Security audit/penetration test with report. (6) SOC 2 Type II or equivalent certification target."
+      },
+      {
+        "requirement": "Art. 22 (Automated Decision-Making & Profiling)",
+        "gap": "If OpenCode uses AI-assisted code suggestions that influence user decisions or modify code without explicit human approval, this may constitute automated decision-making requiring explanation and human override.",
+        "severity": "high",
+        "recommendation": "Review code suggestion/completion features. If they make automated decisions: (1) Add transparency: show users why a suggestion was made, (2) Require explicit acceptance (not auto-apply), (3) Provide way to override/opt-out of automated suggestions, (4) Document in privacy notice and obtain specific consent. Implement user dashboard showing decision history."
+      },
+      {
+        "requirement": "Art. 44-50 (International Data Transfers)",
+        "gap": "If sending user code to US-based providers (OpenAI, Anthropic, GitHub), must have explicit legal mechanism (EU Adequacy Decision, Standard Contractual Clauses, Binding Corporate Rules, or derogation). Post-Schrems II, SCCs alone insufficient without supplementary safeguards.",
+        "severity": "high",
+        "recommendation": "For each external provider: (1) Document data transfer mechanism (SCCs, BCRs, adequacy decision). (2) Conduct Transfer Impact Assessment (TIA) per Schrems II. (3) Implement supplementary safeguards: encryption before transfer, data minimization, vendor transparency reports. (4) Add to privacy notice: 'Your data may transfer to [Country] under [Mechanism].' (5) Allow users to opt-out of external processing."
+      },
+      {
+        "requirement": "Art. 37 (Data Protection Officer) & Art. 39 (DPO Tasks)",
+        "gap": "No mention of Data Protection Officer. If processing large amounts of sensitive data or profiling, DPO may be legally required.",
+        "severity": "medium",
+        "recommendation": "If not already designated: (1) Determine if DPO required (public authority, large-scale systematic monitoring, large-scale processing of special categories). (2) If yes, designate internal/external DPO with contact email. (3) DPO responsibilities: monitoring GDPR compliance, consulting on DPIAs, handling user requests, liaison with supervisory authorities. (4) Publish DPO contact in privacy notice."
+      },
+      {
+        "requirement": "Art. 15-21 (User Rights: Access, Rectification, Erasure, Portability, Objection)",
+        "gap": "No user-facing API or dashboard to exercise data subject rights. Users cannot easily request what data is held, modify it, delete it, or export it.",
+        "severity": "high",
+        "recommendation": "Implement rights management dashboard: (1) Right of Access: API/UI to download all personal data in structured format, (2) Rectification: UI to correct inaccurate data, (3) Erasure (right to be forgotten): one-click deletion with confirmation, (4) Portability: export data in machine-readable format (JSON/CSV), (5) Objection: opt-out of processing. All requests must be fulfilled within 30 days or denial documented."
+      },
+      {
+        "requirement": "Art. 6 (Lawful Basis Documentation)",
+        "gap": "No documented lawful basis for each processing activity. Is consent the basis? Legitimate interest? Contract performance? Unclear.",
+        "severity": "high",
+        "recommendation": "Document lawful basis for each processing: (1) Code analysis/suggestions: Consent (user initiates) or Legitimate Interest (improve product quality). (2) Analytics/telemetry: Consent. (3) Error reporting: Legitimate Interest (security/debugging). (4) Training: DO NOT process unless explicit separate consent. (5) Publish basis in privacy notice with balancing test for Legitimate Interest."
+      },
+      {
+        "requirement": "Art. 28 (Processor Contractual Terms) - Subprocessor Management",
+        "gap": "If external providers use their own subprocessors (e.g., OpenAI uses Microsoft Azure), OpenCode must track these and ensure contracts cascade protection obligations.",
+        "severity": "medium",
+        "recommendation": "For each provider: (1) Request list of subprocessors and their purposes. (2) Ensure DPA includes right to object to new subprocessors. (3) Maintain subprocessor list in compliance records. (4) Document in privacy notice: 'Data may be processed by [Provider] and their subprocessors [list available at X].' (5) Establish process to update subprocessor list quarterly."
+      },
+      {
+        "requirement": "Art. 33 & 34 (Breach Notification)",
+        "gap": "No breach detection, notification, or incident response procedures documented. If a security incident exposes user code, OpenCode may be unable to notify users within 72-hour requirement.",
+        "severity": "high",
+        "recommendation": "Implement breach response: (1) Monitoring/detection: logs for unauthorized access, anomalous data exfiltration. (2) Notification process: template for notifying supervisory authority within 72 hours, users without undue delay. (3) Documentation: incident log with details, cause, impact, remediation. (4) Testing: annual breach simulation/tabletop exercise. (5) Update insurance/legal counsel on obligations."
+      },
+      {
+        "requirement": "Art. 24 (Responsibility of the Controller) - Accountability",
+        "gap": "No evidence of Data Protection by Design and Default (Art. 25), accountability documentation, or governance structure.",
+        "severity": "medium",
+        "recommendation": "Implement privacy governance: (1) Data Protection by Design: minimize code retention, anonymize telemetry, default to no external API calls. (2) Accountability: maintain RACI matrix for data protection roles, conduct annual privacy impact assessment. (3) Documentation: privacy policy, DPAs, DPIAs, breach log, user request log, consent records. (4) Training: annual GDPR training for team members with data access."
+      }
+    ]
+  },
+  "audit_log_requirements": {
+    "must_log": [
+      "User authentication: timestamp, user ID, authentication method, result",
+      "Data access: user ID, timestamp, data type (code/prompt/metadata), purpose, requester role",
+      "External API calls: timestamp, provider ID, model, data classification, request/response size (not content), latency",
+      "Consent changes: timestamp, user ID, consent version, specific permissions granted/revoked",
+      "Data modifications: timestamp, user ID, what data changed, old/new values (for non-code fields), reason",
+      "Data deletion: timestamp, user ID, scope (single session? all user data?), reason, permanent flag",
+      "Third-party access: service name, timestamp, scope, justification",
+      "Security events: failed login attempts, permission denial, suspicious patterns, encryption key usage",
+      "User rights requests: timestamp, request type (access/deletion/portability), user, status, completion date",
+      "System configuration changes: timestamp, what changed, who changed it, approval",
+      "Provider/processor changes: timestamp, new provider added/removed, contractual status"
+    ],
+    "retention": "Audit logs must be retained for minimum 3 years (meets both GDPR Art. 30 and eSignature/eIDAS requirements). Logs containing special categories of data (e.g., if code contains health/financial info) should be retained 5+ years. Implement retention policy enforcement to auto-delete after period expires.",
+    "user_rights": [
+      "Right of Access (Art. 15): User can request and receive all personal data OpenCode holds in structured, machine-readable format within 30 days",
+      "Right to Rectification (Art. 16): User can request correction of inaccurate personal data (e.g., profile info, but not code content)",
+      "Right to Erasure (Art. 17): User can request complete deletion of their data subject to legal exceptions (e.g., cannot erase for accounting/legal compliance if required by law)",
+      "Right to Data Portability (Art. 20): User can request export of data in portable format (JSON) to switch to competing service",
+      "Right to Restrict Processing (Art. 18): User can request temporary suspension of processing while disputing accuracy or lawfulness",
+      "Right to Object (Art. 21): User can opt-out of specific processing purposes (e.g., analytics, external API calls)",
+      "Rights Related to Automated Decisions (Art. 22): If code suggestions constitute automated decisions with legal effects, user has right to human review/override",
+      "Right to Lodge Complaint (Art. 77): User can report OpenCode to supervisory authority (e.g., local data protection authority) if rights are violated"
+    ]
+  },
+  "recommended_implementation": {
+    "provider_isolation": "Implement Provider abstraction ensuring: (1) Single provider selection per session (document which provider processes which data), (2) Provider metadata tagged in audit logs (provider ID, model, region), (3) Provider-specific consent: 'Allow OpenAI API: YES/NO', 'Allow Anthropic API: YES/NO' (not blanket consent), (4) Local-only mode: option to process code entirely locally (open-source LLM or no AI), (5) Processor list: maintain up-to-date list of all external processors in compliance records.",
+    "api_tracking": "Implement API call middleware: (1) Intercept all external requests before leaving application, (2) Log: timestamp, provider ID, model, request size, response size, latency, error status (NOT content), (3) Implement rate limiting per user/provider to detect exfiltration, (4) Store API call logs separately from user code (separate retention/deletion schedules), (5) Provide user dashboard: 'Your code was sent to [OpenAI] on [date] for [purpose]' with delete option.",
+    "user_transparency": "Implement: (1) In-app privacy notice: expandable section explaining data flows, (2) Privacy dashboard: see all connected providers, toggle consent per provider, view API call history, request data access/deletion, (3) Onboarding: step-through consent wizard (separate toggles: local AI, external APIs, analytics, training), (4) Before external call: dialog: 'Send your code to OpenAI? [Yes] [No] [Set default]', (5) Email notification: weekly summary of which providers accessed their data. (6) Plain language: avoid legal jargon, use icons/diagrams.",
+    "consent_mechanism": "Implement consent module: (1) Consent store: database recording timestamp, user ID, specific permission (provider + purpose), version of terms, explicit acceptance flag, (2) Consent UI: per-provider toggles, purpose explanation, cancel button (withdraw consent), (3) Granularity: separate consent for: code processing, AI suggestions, telemetry, training data use, (4) Dependency: block external API calls if consent not given, (5) Scope: limit consent to defined purpose (e.g., 'improve code suggestions' not 'any purpose'), (6) Duration: annual re-consent or upon privacy policy change, (7) Validation: verify consent before processing, log refusal if missing."
+  },
+  "resources": [
+    "https://gdpr-info.eu/art-5-gdpr/ - Data Protection Principles (accessed 2026-02-04)",
+    "https://gdpr-info.eu/art-30-gdpr/ - Records of Processing Activities (accessed 2026-02-04)",
+    "https://gdpr-info.eu/art-32-gdpr/ - Security of Processing (accessed 2026-02-04)",
+    "https://gdpr-info.eu/art-6-gdpr/ - Lawfulness of Processing (accessed 2026-02-04)",
+    "https://gdpr-info.eu/art-7-gdpr/ - Conditions for Consent (accessed 2026-02-04)",
+    "https://gdpr-info.eu/art-13-gdpr/ - Information to be Provided to Data Subjects (accessed 2026-02-04)",
+    "https://gdpr-info.eu/art-22-gdpr/ - Automated Decision-Making (accessed 2026-02-04)",
+    "https://ai-act-law.eu/ - EU AI Act (comprehensive framework for AI regulation, applicable from 2 Aug 2026, mandatory requirements 1-3 years after entry into force, accessed 2026-02-04)"
+  ],
+  "notes": [
+    "**CRITICAL FINDING**: OpenCode must immediately establish what personal data flows where before European expansion. Lack of audit logging is the highest-priority gap and foundational blocker.",
+    "**CONSENT PRECEDENT**: Automattic (WordPress) was fined €50M (2022) for insufficient consent mechanisms. Consent must be freely given, not bundled with service provision.",
+    "**BREACH COST**: GDPR fines up to €20M or 4% of global revenue (whichever higher) for systematic violations. Companies have reported €10-50M fines for consent/processing violations.",
+    "**SCHREMS II IMPLICATION**: Transferring EU user data to US AI providers requires either: (1) EU adequacy decision (unavailable for US since Schrems II 2020), (2) Standard Contractual Clauses + supplementary safeguards (encryption, data minimization), or (3) explicit user consent with alternative local option.",
+    "**AI ACT INTERACTION**: EU AI Act (effective 2 Aug 2026) adds transparency and high-risk requirements. If OpenCode's code suggestions influence user decisions or involve profiling, may be classified high-risk requiring: documented risk assessment, human oversight, technical documentation, record-keeping.",
+    "**DPA CRITICALITY**: Data Processing Agreements with external providers (OpenAI, Anthropic, etc.) are non-negotiable for lawful processing. Absence of DPA makes processing unlawful regardless of consent.",
+    "**RECOMMENDED TIMELINE**: Month 1-2: Conduct gap analysis + audit all providers for DPA. Month 2-3: Implement consent + privacy notice. Month 3-6: Build audit logging + user rights dashboard. Target: full compliance before European market entry.",
+    "**ENFORCEMENT RISK**: European Data Protection Board (EDPB) increased focus on AI/automated processing. Expected guidance on AI consent, profiling, and data minimization by end 2026.",
+    "**COMPETITIVE ADVANTAGE**: Privacy-first competitors (e.g., local-only or open-source LLM options) may gain EU market share. OpenCode can differentiate with transparent, user-controlled consent model."
+  ]
+}

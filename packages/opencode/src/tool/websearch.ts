@@ -3,6 +3,7 @@ import { Tool } from "./tool"
 import DESCRIPTION from "./websearch.txt"
 import { fetchWithToolBypass, isEgressBlocked } from "../net/egress-policy"
 import { auditRecordNoWait } from "../audit"
+import { isGitHubOnlyMode } from "../gdpr/build-constants"
 
 const API_CONFIG = {
   BASE_URL: "https://mcp.exa.ai",
@@ -39,7 +40,7 @@ interface McpSearchResponse {
 }
 
 export const WebSearchTool = Tool.define("websearch", async () => {
-  if (process.env.OPENCODE_ONLY_GITHUB) throw new Error("websearch tool disabled in GitHub-only mode")
+  if (isGitHubOnlyMode()) throw new Error("websearch tool disabled in GitHub-only mode")
   return {
     get description() {
       return DESCRIPTION.replace("{{date}}", new Date().toISOString().slice(0, 10))
@@ -103,7 +104,14 @@ export const WebSearchTool = Tool.define("websearch", async () => {
           "content-type": "application/json",
         }
 
-        await auditRecordNoWait("tool.websearch.request", { sessionID: ctx.sessionID, agent: ctx.agent, query: params.query, baseURL: API_CONFIG.BASE_URL, egressBlocked: isEgressBlocked(), time: new Date().toISOString() })
+        await auditRecordNoWait("tool.websearch.request", {
+          sessionID: ctx.sessionID,
+          agent: ctx.agent,
+          query: params.query,
+          baseURL: API_CONFIG.BASE_URL,
+          egressBlocked: isEgressBlocked(),
+          time: new Date().toISOString(),
+        })
 
         const response = await fetchWithToolBypass(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.SEARCH}`, {
           method: "POST",

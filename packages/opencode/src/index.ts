@@ -4,6 +4,7 @@ import { RunCommand } from "./cli/cmd/run"
 import { GenerateCommand } from "./cli/cmd/generate"
 import { Log } from "./util/log"
 import { AuthCommand } from "./cli/cmd/auth"
+import { AuditCommand } from "./cli/cmd/audit"
 import { AgentCommand } from "./cli/cmd/agent"
 import { UpgradeCommand } from "./cli/cmd/upgrade"
 import { UninstallCommand } from "./cli/cmd/uninstall"
@@ -26,6 +27,8 @@ import { EOL } from "os"
 import { WebCommand } from "./cli/cmd/web"
 import { PrCommand } from "./cli/cmd/pr"
 import { SessionCommand } from "./cli/cmd/session"
+import { logGDPRStatus } from "./gdpr/build-constants"
+import { enableNetworkAudit } from "./audit/network"
 
 process.on("unhandledRejection", (e) => {
   Log.Default.error("rejection", {
@@ -56,6 +59,10 @@ const cli = yargs(hideBin(process.argv))
     type: "string",
     choices: ["DEBUG", "INFO", "WARN", "ERROR"],
   })
+  .option("audit", {
+    describe: "enable network audit logging (logs all HTTP requests for GDPR compliance verification)",
+    type: "boolean",
+  })
   .middleware(async (opts) => {
     await Log.init({
       print: process.argv.includes("--print-logs"),
@@ -74,6 +81,14 @@ const cli = yargs(hideBin(process.argv))
       version: Installation.VERSION,
       args: process.argv.slice(2),
     })
+
+    // Log GDPR status at startup
+    logGDPRStatus()
+
+    // Enable network audit mode if --audit flag is present
+    if (opts.audit || process.argv.includes("--audit")) {
+      enableNetworkAudit()
+    }
   })
   .usage("\n" + UI.logo())
   .completion("completion", "generate shell completion script")
@@ -85,6 +100,7 @@ const cli = yargs(hideBin(process.argv))
   .command(GenerateCommand)
   .command(DebugCommand)
   .command(AuthCommand)
+  .command(AuditCommand)
   .command(AgentCommand)
   .command(UpgradeCommand)
   .command(UninstallCommand)

@@ -5,6 +5,8 @@ import z from "zod"
 import { data } from "./models-macro" with { type: "macro" }
 import { Installation } from "../installation"
 import { Flag } from "../flag/flag"
+import { logModelMetadataFetch } from "../audit/gdpr"
+import { isGitHubOnlyMode } from "../gdpr/build-constants"
 
 export namespace ModelsDev {
   const log = Log.create({ service: "models.dev" })
@@ -77,85 +79,85 @@ export namespace ModelsDev {
   export type Provider = z.infer<typeof Provider>
 
   async function getRawModels() {
-  // Try cached file first
-  const file = Bun.file(filepath)
-  let result = await file.json().catch(() => {})
-  if (result) return result
+    // Try cached file first
+    const file = Bun.file(filepath)
+    let result = await file.json().catch(() => {})
+    if (result) return result
 
-  // If models-macro exports a function, call it to get embedded data
-  if (typeof data === 'function') {
-    const json = await data()
-    try {
-      return JSON.parse(json)
-    } catch (e) {
-      // fallthrough
+    // If models-macro exports a function, call it to get embedded data
+    if (typeof data === "function") {
+      const json = await data()
+      try {
+        return JSON.parse(json)
+      } catch (e) {
+        // fallthrough
+      }
     }
-  }
 
-  // If models-macro exports a string, parse it
-  if (typeof data === 'string') {
-    try {
-      return JSON.parse(data)
-    } catch (e) {
-      // fallthrough
+    // If models-macro exports a string, parse it
+    if (typeof data === "string") {
+      try {
+        return JSON.parse(data)
+      } catch (e) {
+        // fallthrough
+      }
     }
-  }
 
-  // Avoid network fetch in GitHub-only mode: return a minimal github-copilot manifest
-  if (process.env.OPENCODE_ONLY_GITHUB) {
-    return {
-      "github-copilot": {
-        id: "github-copilot",
-        name: "GitHub Copilot",
-        env: [],
-        npm: "@ai-sdk/github-copilot",
-        api: "https://api.github.com",
-        models: {
-          "gpt-5-mini": {
-            id: "gpt-5-mini",
-            name: "gpt-5-mini",
-            release_date: "2026-01-01",
-            attachment: false,
-            reasoning: true,
-            temperature: true,
-            tool_call: false,
-            interleaved: false,
-            cost: { input: 0, output: 0 },
-            limit: { context: 1000000, input: 10000, output: 10000 },
-            modalities: { input: ["text"], output: ["text"] },
-            options: {},
+    // Avoid network fetch in GitHub-only mode: return a minimal github-copilot manifest
+    if (isGitHubOnlyMode()) {
+      return {
+        "github-copilot": {
+          id: "github-copilot",
+          name: "GitHub Copilot",
+          env: [],
+          npm: "@ai-sdk/github-copilot",
+          api: "https://api.github.com",
+          models: {
+            "gpt-5-mini": {
+              id: "gpt-5-mini",
+              name: "gpt-5-mini",
+              release_date: "2026-01-01",
+              attachment: false,
+              reasoning: true,
+              temperature: true,
+              tool_call: false,
+              interleaved: false,
+              cost: { input: 0, output: 0 },
+              limit: { context: 1000000, input: 10000, output: 10000 },
+              modalities: { input: ["text"], output: ["text"] },
+              options: {},
+            },
           },
         },
-      },
+      }
     }
+
+    // Fallback to fetching from models.dev
+    const url = Global.Path.modelsDevUrl
+    const json = await fetch(`${url}/api.json`).then((x) => x.text())
+    return JSON.parse(json)
   }
 
-  // Fallback to fetching from models.dev
-  const url = Global.Path.modelsDevUrl
-  const json = await fetch(`${url}/api.json`).then((x) => x.text())
-  return JSON.parse(json)
-}
-
-export async function get() {
-  // When OPENCODE_ONLY_GITHUB is enabled, filter models to only include github-copilot
-  if (process.env.OPENCODE_ONLY_GITHUB) {
-    const data = await getRawModels()
-    const filtered: { [k: string]: any } = {}
-    for (const [k, v] of Object.entries(data)) {
-      if (k.startsWith("github-copilot")) filtered[k] = v
+  export async function get() {
+    // When OPENCODE_ONLY_GITHUB is enabled, filter models to only include github-copilot
+    if (isGitHubOnlyMode()) {
+      const data = await getRawModels()
+      const filtered: { [k: string]: any } = {}
+      for (const [k, v] of Object.entries(data)) {
+        if (k.startsWith("github-copilot")) filtered[k] = v
+      }
+      return filtered
     }
-    return filtered
-  }
 
-  // When OPENCODE_ONLY_GITHUB is enabled, filter models to only include github-copilot
-  if (process.env.OPENCODE_ONLY_GITHUB) {
-    const data = await getRawModels()
-    const filtered: { [k: string]: any } = {}
-    for (const [k, v] of Object.entries(data)) {
-      if (k.startsWith("github-copilot")) filtered[k] = v
+    // When OPENCODE_ONLY_GITHUB is enabled, filter models to only include github-copilot
+    if (isGitHubOnlyMode()) {
+      const data = await getRawModels()
+      const filtered: { [k: string]: any } = {}
+      for (const [k, v] of Object.entries(data)) {
+        if (k.startsWith("github-copilot")) filtered[k] = v
+      }
+      return filtered
     }
-    return filtered
-  }
     refresh()
     const file = Bun.file(filepath)
     let result = await file.json().catch(() => {})
@@ -173,11 +175,13 @@ export async function get() {
 
     // Only expose the allowed providers (non-destructive runtime filter)
     // Make filter opt-in via OPENCODE_ONLY_GITHUB to avoid breaking tests and local tooling
-    if (process.env.OPENCODE_ONLY_GITHUB) {
+    if (isGitHubOnlyMode()) {
       const allowed = new Set(["github-copilot"])
       const providers = (result as Record<string, Provider>) || {}
       const filtered = Object.fromEntries(
-        Object.entries(providers).filter(([key, val]) => allowed.has(key) || (val && typeof val === "object" && allowed.has((val as any).id))),
+        Object.entries(providers).filter(
+          ([key, val]) => allowed.has(key) || (val && typeof val === "object" && allowed.has((val as any).id)),
+        ),
       ) as Record<string, Provider>
 
       // Ensure any provider models that reference external npm packages are also filtered
@@ -198,6 +202,19 @@ export async function get() {
   }
 
   export async function refresh() {
+    // GDPR COMPLIANCE: Block models.dev fetch in GitHub-only mode
+    // models.dev sends metadata about installed providers to external service
+    // In GDPR mode, only GitHub Copilot is used, so external model discovery is unnecessary
+    if (isGitHubOnlyMode()) {
+      log.info("models.dev fetch blocked in GitHub-only (GDPR) mode")
+      logModelMetadataFetch({
+        source: "models.dev",
+        blocked: true,
+        reason: "github_only_mode_active",
+      })
+      return
+    }
+
     if (Flag.OPENCODE_DISABLE_MODELS_FETCH) return
     const file = Bun.file(filepath)
     log.info("refreshing", {

@@ -3,6 +3,8 @@ import { Installation } from "../installation"
 import { Session } from "../session"
 import { MessageV2 } from "../session/message-v2"
 import { Log } from "../util/log"
+import { logSessionShare, logDataTransfer } from "../audit/gdpr"
+import { isGitHubOnlyMode, isSessionSharingDisabled } from "../gdpr/build-constants"
 
 export namespace Share {
   const log = Log.create({ service: "share" })
@@ -11,7 +13,21 @@ export namespace Share {
   const pending = new Map<string, any>()
 
   export async function sync(key: string, content: any) {
-    if (disabled) return
+    if (disabled) {
+      // GDPR Audit: Log blocked sharing attempt
+      const [root, ...splits] = key.split("/")
+      if (root === "session") {
+        const [sub, sessionID] = splits
+        if (sub !== "share") {
+          logSessionShare({
+            sessionID: sessionID ?? "unknown",
+            action: "blocked",
+            reason: "session_sharing_disabled",
+          })
+        }
+      }
+      return
+    }
     const [root, ...splits] = key.split("/")
     if (root !== "session") return
     const [sub, sessionID] = splits
@@ -19,6 +35,17 @@ export namespace Share {
     const share = await Session.getShare(sessionID).catch(() => {})
     if (!share) return
     const { secret } = share
+
+    // GDPR Audit: Log data transfer to external API
+    logDataTransfer({
+      sessionID,
+      recipient: "opencode_api",
+      recipientCountry: "USA",
+      dataCategories: ["conversation_context", "session_metadata"],
+      legalBasis: "consent",
+      transferMechanism: "standard_contractual_clauses",
+    })
+
     pending.set(key, content)
     queue = queue
       .then(async () => {
@@ -70,10 +97,21 @@ export namespace Share {
     process.env["OPENCODE_API"] ??
     (Installation.isPreview() || Installation.isLocal() ? "https://api.dev.opencode.ai" : "https://api.opencode.ai")
 
-  const disabled = process.env["OPENCODE_DISABLE_SHARE"] === "true" || process.env["OPENCODE_DISABLE_SHARE"] === "1"
+  // GDPR COMPLIANCE: Session sharing is now OPT-IN instead of opt-out
+  // - By default, session sharing is DISABLED to comply with GDPR Art. 6 (lawful basis)
+  // - In GitHub-only mode, sharing is ALWAYS disabled (European deployments)
+  // - To enable sharing, set OPENCODE_ENABLE_SHARE=1 (requires user consent)
+  // - In GDPR builds, this is hardcoded at build time and cannot be overridden
+  const disabled = isSessionSharingDisabled()
 
   export async function create(sessionID: string) {
-    if (disabled) return { url: "", secret: "" }
+    if (disabled) {
+      logSessionShare({ sessionID, action: "blocked", reason: "session_sharing_disabled" })
+      return { url: "", secret: "" }
+    }
+
+    logSessionShare({ sessionID, action: "create" })
+
     return fetch(`${URL}/share_create`, {
       method: "POST",
       body: JSON.stringify({ sessionID: sessionID }),
@@ -83,7 +121,13 @@ export namespace Share {
   }
 
   export async function remove(sessionID: string, secret: string) {
-    if (disabled) return {}
+    if (disabled) {
+      logSessionShare({ sessionID, action: "blocked", reason: "session_sharing_disabled" })
+      return {}
+    }
+
+    logSessionShare({ sessionID, action: "delete" })
+
     return fetch(`${URL}/share_delete`, {
       method: "POST",
       body: JSON.stringify({ sessionID, secret }),

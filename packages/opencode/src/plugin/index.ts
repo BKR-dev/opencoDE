@@ -11,6 +11,7 @@ import { CodexAuthPlugin } from "./codex"
 import { Session } from "../session"
 import { NamedError } from "@opencode-ai/util/error"
 import { CopilotAuthPlugin } from "./copilot"
+import { isGitHubOnlyMode } from "../gdpr/build-constants"
 
 export namespace Plugin {
   const log = Log.create({ service: "plugin" })
@@ -18,7 +19,9 @@ export namespace Plugin {
   const BUILTIN: string[] = ["@gitlab/opencode-gitlab-auth@1.3.2"]
 
   // Built-in plugins that are directly imported (not installed from npm)
-  const INTERNAL_PLUGINS: PluginInstance[] = process.env.OPENCODE_ONLY_GITHUB ? [CopilotAuthPlugin] : [CodexAuthPlugin, CopilotAuthPlugin]
+  const INTERNAL_PLUGINS: PluginInstance[] = isGitHubOnlyMode()
+    ? [CopilotAuthPlugin]
+    : [CodexAuthPlugin, CopilotAuthPlugin]
 
   const state = Instance.state(async () => {
     const client = createOpencodeClient({
@@ -43,8 +46,8 @@ export namespace Plugin {
       hooks.push(init)
     }
 
-    const plugins = process.env.OPENCODE_ONLY_GITHUB ? [] : [...(config.plugin ?? [])]
-    if (!Flag.OPENCODE_DISABLE_DEFAULT_PLUGINS && !process.env.OPENCODE_ONLY_GITHUB) {
+    const plugins = isGitHubOnlyMode() ? [] : [...(config.plugin ?? [])]
+    if (!Flag.OPENCODE_DISABLE_DEFAULT_PLUGINS && !isGitHubOnlyMode()) {
       plugins.push(...BUILTIN)
     }
 

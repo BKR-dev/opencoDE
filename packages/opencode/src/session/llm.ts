@@ -24,6 +24,7 @@ import { SystemPrompt } from "./system"
 import { Flag } from "@/flag/flag"
 import { PermissionNext } from "@/permission/next"
 import { Auth } from "@/auth"
+import { logProviderUsage } from "@/audit/gdpr"
 
 export namespace LLM {
   const log = Log.create({ service: "llm" })
@@ -46,6 +47,15 @@ export namespace LLM {
   export type StreamOutput = StreamTextResult<ToolSet, unknown>
 
   export async function stream(input: StreamInput) {
+    // GDPR Audit: Log provider/model usage for accountability
+    logProviderUsage({
+      sessionID: input.sessionID,
+      providerID: input.model.providerID,
+      modelID: input.model.id,
+      agent: input.agent.name,
+      purpose: "chat_completion",
+    })
+
     const l = log
       .clone()
       .tag("providerID", input.model.providerID)

@@ -16,28 +16,12 @@ import { iife } from "@/util/iife"
 
 // Direct imports for bundled providers
 
-
-
-
-
-
-
-
-
 import { createOpenaiCompatible as createGitHubCopilotOpenAICompatible } from "./sdk/openai-compatible/src"
 
-
-
-
-
-
-
-
-
-
-
 import { ProviderTransform } from "./transform"
-import { packageAllowed } from "../net/egress-policy";
+import { packageAllowed } from "../net/egress-policy"
+import { logProviderUsage, logProviderFilter } from "../audit/gdpr"
+import { isGitHubOnlyMode } from "../gdpr/build-constants"
 
 export namespace Provider {
   const log = Log.create({ service: "provider" })
@@ -659,13 +643,44 @@ export namespace Provider {
     const modelsDev = await ModelsDev.get()
     const database = mapValues(modelsDev, fromModelsDevProvider)
 
-    const disabled = new Set(config.disabled_providers ?? [])
-    const enabled = config.enabled_providers ? new Set(config.enabled_providers) : null
+    // GDPR Compliance: Enforce OPENCODE_ONLY_GITHUB - prevent config overrides
+    // When OPENCODE_ONLY_GITHUB is set, only github-copilot providers are allowed
+    // This ensures European deployments cannot bypass provider restrictions via config
+    // In GDPR builds, this is hardcoded at build time and cannot be overridden
+    const githubOnlyMode = isGitHubOnlyMode()
+
+    const disabled = githubOnlyMode
+      ? new Set<string>() // In GitHub-only mode, disable list is ignored
+      : new Set(config.disabled_providers ?? [])
+
+    const enabled = githubOnlyMode
+      ? new Set(["github-copilot", "github-copilot-enterprise"]) // Force GitHub-only
+      : config.enabled_providers
+        ? new Set(config.enabled_providers)
+        : null
 
     function isProviderAllowed(providerID: string): boolean {
-      if (enabled && !enabled.has(providerID)) return false
-      if (disabled.has(providerID)) return false
-      return true
+      const allowed = (() => {
+        if (enabled && !enabled.has(providerID)) return false
+        if (disabled.has(providerID)) return false
+        return true
+      })()
+
+      // GDPR Audit: Log provider filtering decisions
+      if (!allowed || githubOnlyMode) {
+        logProviderFilter({
+          providerID,
+          allowed,
+          reason: !allowed
+            ? enabled && !enabled.has(providerID)
+              ? "not_in_enabled_list"
+              : "in_disabled_list"
+            : "github_only_mode_active",
+          githubOnlyMode,
+        })
+      }
+
+      return allowed
     }
 
     const providers: { [providerID: string]: Info } = {}
@@ -711,7 +726,6 @@ export namespace Provider {
       if (database["github-copilot"]) mergeProvider("github-copilot", {})
       if (database["github-copilot-enterprise"]) mergeProvider("github-copilot-enterprise", {})
     }
-
 
     // extend database from config
     for (const [providerID, provider] of configProviders) {
@@ -932,7 +946,11 @@ export namespace Provider {
 
     log.info("modelsDev.database_keys", { keys: Object.keys(database) })
     log.info("modelsDev.providers_keys", { keys: Object.keys(providers) })
-    log.info("modelsDev.providers_model_counts", { counts: Object.fromEntries(Object.entries(providers).map(([k, v]) => [k, Object.keys((v as any).models ?? {}).length])) })
+    log.info("modelsDev.providers_model_counts", {
+      counts: Object.fromEntries(
+        Object.entries(providers).map(([k, v]) => [k, Object.keys((v as any).models ?? {}).length]),
+      ),
+    })
     return {
       models: languages,
       providers,
@@ -1029,10 +1047,10 @@ export namespace Provider {
       let installedPath: string
       if (!model.api.npm.startsWith("file://")) {
         // Prevent installing packages not allowed under OPENCODE_BLOCK_EXTERNAL_APIS
-          if (!packageAllowed(model.api.npm)) {
-            throw new Error(`Blocked install of package ${model.api.npm} due to OPENCODE_BLOCK_EXTERNAL_APIS`)
-          }
-          installedPath = await BunProc.install(model.api.npm, "latest")
+        if (!packageAllowed(model.api.npm)) {
+          throw new Error(`Blocked install of package ${model.api.npm} due to OPENCODE_BLOCK_EXTERNAL_APIS`)
+        }
+        installedPath = await BunProc.install(model.api.npm, "latest")
       } else {
         log.info("loading local provider", { pkg: model.api.npm })
         installedPath = model.api.npm

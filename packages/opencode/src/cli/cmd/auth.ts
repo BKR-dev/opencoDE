@@ -11,6 +11,7 @@ import { Global } from "../../global"
 import { Plugin } from "../../plugin"
 import { Instance } from "../../project/instance"
 import type { Hooks } from "@opencode-ai/plugin"
+import { isGitHubOnlyMode } from "../../gdpr/build-constants"
 
 type PluginAuth = NonNullable<Hooks["auth"]>
 
@@ -180,7 +181,7 @@ export const AuthListCommand = cmd({
     let results = Object.entries(await Auth.all())
     const database = await ModelsDev.get()
 
-    if (process.env.OPENCODE_ONLY_GITHUB) {
+    if (isGitHubOnlyMode()) {
       results = results.filter(([providerID]) => providerID in database)
     }
     for (const [providerID, result] of results) {
@@ -384,7 +385,7 @@ export const AuthLogoutCommand = cmd({
     UI.empty()
     const allCreds = Object.entries(await Auth.all())
     const database = await ModelsDev.get()
-    const credentials = process.env.OPENCODE_ONLY_GITHUB ? allCreds.filter(([key]) => key in database) : allCreds
+    const credentials = isGitHubOnlyMode() ? allCreds.filter(([key]) => key in database) : allCreds
     prompts.intro("Remove credential")
     if (credentials.length === 0) {
       prompts.log.error("No credentials found")

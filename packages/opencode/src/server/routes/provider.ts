@@ -8,6 +8,7 @@ import { ProviderAuth } from "../../provider/auth"
 import { mapValues } from "remeda"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
+import { isGitHubOnlyMode } from "../../gdpr/build-constants"
 
 export const ProviderRoutes = lazy(() =>
   new Hono()
@@ -48,7 +49,7 @@ export const ProviderRoutes = lazy(() =>
         }
 
         // If GitHub-only mode, further restrict to only github-copilot
-        if (process.env.OPENCODE_ONLY_GITHUB) {
+        if (isGitHubOnlyMode()) {
           for (const k of Object.keys(filteredProviders)) {
             if (!k.startsWith("github-copilot")) delete filteredProviders[k]
           }

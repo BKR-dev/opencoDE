@@ -1,0 +1,152 @@
+{
+  "status": "done",
+  "summary": "Comprehensive audit of opencode provider loading and UI visibility mechanisms. The system uses a multi-layered loading approach with bundled providers, custom loaders, environment-based filtering, and configuration-based filtering. OPENCODE_ONLY_GITHUB mode is implemented but has duplicate code blocks and potential consistency issues.",
+  "provider_loading": {
+    "bundled_providers": ["@ai-sdk/github-copilot (GitHub Copilot)"],
+    "custom_loaders": [
+      "anthropic",
+      "opencode",
+      "openai",
+      "github-copilot",
+      "github-copilot-enterprise",
+      "azure",
+      "azure-cognitive-services",
+      "amazon-bedrock",
+      "openrouter",
+      "vercel",
+      "google-vertex",
+      "google-vertex-anthropic",
+      "sap-ai-core",
+      "zenmux",
+      "gitlab",
+      "cloudflare-ai-gateway",
+      "cerebras"
+    ],
+    "environment_flags": [
+      "OPENCODE_ONLY_GITHUB - Restricts all providers to github-copilot only (blocks external APIs)",
+      "OPENCODE_BLOCK_EXTERNAL_APIS - Blocks external HTTP requests and package loads",
+      "OPENCODE_ENABLE_EXPERIMENTAL_MODELS - Enables alpha-status models",
+      "OPENCODE_DISABLE_MODELS_FETCH - Prevents fetching fresh models from models.dev",
+      "AWS_REGION - Sets AWS region for amazon-bedrock provider",
+      "AWS_PROFILE - Sets AWS profile for amazon-bedrock provider",
+      "GOOGLE_CLOUD_PROJECT, GCP_PROJECT, GCLOUD_PROJECT - Sets GCP project for google-vertex",
+      "GOOGLE_CLOUD_LOCATION, VERTEX_LOCATION - Sets GCP location for google-vertex",
+      "AZURE_COGNITIVE_SERVICES_RESOURCE_NAME - Sets Azure cognitive services resource name"
+    ],
+    "config_options": [
+      "disabled_providers: Array of provider IDs to disable (disables providers that would load)",
+      "enabled_providers: Array of provider IDs to enable (allowlist mode - ONLY these providers available)",
+      "provider.<providerID>.name - Override provider name",
+      "provider.<providerID>.env - Environment variables for API keys",
+      "provider.<providerID>.api - API endpoint URL",
+      "provider.<providerID>.npm - NPM package for provider SDK",
+      "provider.<providerID>.options - Custom provider options",
+      "provider.<providerID>.models.<modelID> - Model-specific overrides and configuration",
+      "provider.<providerID>.blacklist - Model IDs to exclude",
+      "provider.<providerID>.whitelist - Model IDs to include (if set, only these available)",
+      "model - Default model (format: provider/model)",
+      "small_model - Small model for lightweight tasks"
+    ]
+  },
+  "provider_filtering": {
+    "mechanisms": [
+      "1. Config-based filtering via disabled_providers (blocklist mode)",
+      "2. Config-based filtering via enabled_providers (allowlist mode - takes precedence)",
+      "3. Environment variable detection (OPENCODE_ONLY_GITHUB, egress policies)",
+      "4. Model status filtering (alpha models require OPENCODE_ENABLE_EXPERIMENTAL_MODELS flag)",
+      "5. Model deprecation filtering (deprecated models removed from UI)",
+      "6. Model blacklist/whitelist (per-provider configuration)",
+      "7. Variant filtering (model variants can be disabled via configuration)"
+    ],
+    "disabled_providers_config": "Array of provider IDs to disable. Providers in this list will not be loaded or displayed to users. Checked at multiple points: during provider merge, environment variable loading, API key loading, plugin loading, and custom loader execution. Takes precedence when OPENCODE_ONLY_GITHUB is NOT enabled.",
+    "enabled_providers_config": "Array of provider IDs to enable (allowlist mode). When set, ONLY providers in this list are available - all other providers are ignored. If BOTH disabled_providers and enabled_providers are set, enabled_providers takes precedence (allowlist wins). This provides a whitelist capability for locked-down environments.",
+    "opencode_only_github_behavior": "When OPENCODE_ONLY_GITHUB=1 environment variable is set: (1) ModelsDev.get() filters models to return ONLY github-copilot and github-copilot-enterprise entries; (2) Provider.list() ensures github-copilot providers are present even without env/auth/plugins; (3) Provider.defaultModel() falls back to github-copilot if no other providers available; (4) All external network requests are blocked (hostAllowed whitelist); (5) Only @ai-sdk/github-copilot package can be installed; (6) webfetch and websearch tools are disabled; (7) Plugin loading is restricted (INTERNAL_PLUGINS only); (8) ProviderRoutes further filters to github-copilot entries. This is designed for restricted environments like GitHub Actions runners."
+  },
+  "ui_visibility": {
+    "tui_files": [
+      "packages/opencode/src/cli/cmd/tui/component/dialog-model.tsx - Main model selection dialog",
+      "packages/opencode/src/cli/cmd/tui/component/dialog-provider.tsx - Provider selection dialog",
+      "packages/opencode/src/cli/cmd/tui/context/sync.tsx - Syncs provider data from server",
+      "packages/opencode/src/server/routes/provider.ts - API endpoint /api/provider",
+      "packages/opencode/src/server/routes/tui.ts - TUI control routes"
+    ],
+    "model_selection_logic": "DialogModel component (dialog-model.tsx) displays models with categories: Favorites (starred models), Recent (recently used), All models grouped by provider. Favorites are stored in local state. Models are filtered to show: (1) Status check (deprecated removed); (2) Cost visibility (free models flagged); (3) Provider connection status (opencode provider nano models disabled); (4) Fuzzy search across model names and provider names. Provider filtering respects enabled_providers and disabled_providers. If only opencode provider available and no API key, free models shown. DialogProvider shows provider connection UI with OAuth/API key options.",
+    "provider_list_endpoint": "GET /api/provider returns { all: Provider[], default: {[providerID]: modelID}, connected: string[] }. Filters providers based on: (1) ModelsDev.get() result (respects OPENCODE_ONLY_GITHUB); (2) disabled_providers config; (3) enabled_providers config (allowlist if set); (4) Additional OPENCODE_ONLY_GITHUB filtering; (5) Merges with Provider.list() for real-time connection status. Provides default model for each provider based on priority sorting."
+  },
+  "issues_found": [
+    {
+      "issue": "DUPLICATE CODE: OPENCODE_ONLY_GITHUB filtering logic is repeated 4 times in ModelsDev.get() function",
+      "severity": "high",
+      "location": "packages/opencode/src/provider/models.ts:140-148 and 150-158 and 176-195",
+      "recommendation": "Consolidate into single filtering function. Lines 140-148 and 150-158 are nearly identical. Extract to helper function and call once. This blocks network fetch AND filters results unnecessarily twice."
+    },
+    {
+      "issue": "INCONSISTENCY: getRawModels() returns minimal github-copilot hardcoded data but get() tries to fetch and parse anyway",
+      "severity": "medium",
+      "location": "packages/opencode/src/provider/models.ts:104-131 and 139-198",
+      "recommendation": "If getRawModels() returns minimal data for OPENCODE_ONLY_GITHUB, the get() function should not attempt to refresh/refetch. Either return early in getRawModels() OR handle refresh differently. Currently creates inconsistent state between getRawModels return and get() processing."
+    },
+    {
+      "issue": "MISSING VALIDATION: enabled_providers allowlist doesn't validate against disabled_providers overlap",
+      "severity": "medium",
+      "location": "packages/opencode/src/provider/provider.ts:662-668",
+      "recommendation": "If a provider is in both enabled_providers (allowlist) AND disabled_providers (blocklist), behavior is undefined. Add validation: if enabled_providers exists, ignore disabled_providers OR throw error on conflict. Currently enabled_providers logic doesn't check disabled list."
+    },
+    {
+      "issue": "HARDCODED FILTERING: OPENCODE_ONLY_GITHUB filtering is hardcoded in 6+ locations (provider.ts, models.ts, plugin.ts, auth.ts, server routes)",
+      "severity": "medium",
+      "location": "Multiple files: provider.ts:710-712, models.ts:104-131, models.ts:140-195, plugin.ts, auth.ts, server/routes/provider.ts:51-55",
+      "recommendation": "Create a single provider filtering function that respects: (1) enabled_providers allowlist, (2) disabled_providers blocklist, (3) OPENCODE_ONLY_GITHUB flag, (4) OPENCODE_BLOCK_EXTERNAL_APIS flag. Use this consistently across all code paths. Consider a ProviderFilter namespace."
+    },
+    {
+      "issue": "INCOMPLETE EGRESS BLOCKING: OPENCODE_BLOCK_EXTERNAL_APIS only blocks @ai-sdk/github-copilot, but ModelsDev.refresh() uses fetch()",
+      "severity": "high",
+      "location": "packages/opencode/src/provider/models.ts:200-217 (refresh) and net/egress-policy.ts:58-67 (packageAllowed)",
+      "recommendation": "refresh() should check isEgressBlocked() before fetching. Currently, while provider loader checks packageAllowed(), ModelsDev.refresh() doesn't respect OPENCODE_BLOCK_EXTERNAL_APIS or OPENCODE_ONLY_GITHUB. If egress is blocked, should skip network fetch entirely."
+    },
+    {
+      "issue": "CONFIG PRECEDENCE UNCLEAR: enabled_providers is described as allowlist but interaction with disabled_providers not documented",
+      "severity": "medium",
+      "location": "packages/opencode/src/config/config.ts (schema definition)",
+      "recommendation": "Document: 'When enabled_providers is set, only these providers are available. disabled_providers is ignored. This provides blocklist-or-allowlist semantics.' Add test case covering both configs set simultaneously."
+    },
+    {
+      "issue": "UNUSED FALLBACK: Provider.defaultModel() falls back to opencode/gpt-5-nano even when small_model config could specify it",
+      "severity": "low",
+      "location": "packages/opencode/src/provider/provider.ts:1121-1161",
+      "recommendation": "getSmallModel() respects small_model config, but defaultModel() has hardcoded priority list that ignores config value. Consider using config value if available, else fallback to priority list."
+    },
+    {
+      "issue": "GITHUB-COPILOT ENTERPRISE INHERITANCE: Enterprise variant created dynamically from GitHub Copilot but not documented",
+      "severity": "low",
+      "location": "packages/opencode/src/provider/provider.ts:682-694",
+      "recommendation": "Document that github-copilot-enterprise is a runtime-generated variant that mirrors github-copilot models and inherits auth. If org wants to disable one, must disable both to avoid confusion."
+    },
+    {
+      "issue": "MODEL LOADER REGISTRY NOT EXPOSED: Custom model loaders (CUSTOM_LOADERS) are internal, no way for plugins to register custom loaders",
+      "severity": "low",
+      "location": "packages/opencode/src/provider/provider.ts:68-487",
+      "recommendation": "If plugins need custom model loading logic, provide mechanism to register. Currently baked into provider.ts. Consider extracting to pluggable system."
+    },
+    {
+      "issue": "NO ERROR ON MISCONFIGURATION: If enabled_providers references non-existent provider, silently ignored",
+      "severity": "low",
+      "location": "packages/opencode/src/provider/provider.ts:666",
+      "recommendation": "Warn or error if enabled_providers includes provider IDs that don't exist in database. Currently creates silent failures when users typo provider names in config."
+    }
+  ],
+  "notes": [
+    "BUNDLED ONLY: Only @ai-sdk/github-copilot is bundled. All other providers are installed dynamically via npm/yarn (respecting egress policy).",
+    "SDK CACHING: Provider SDKs are cached by xxHash32 of (npm_package_name + options). Same SDK configuration reused across calls.",
+    "CUSTOM LOADERS DETERMINE AUTOLOAD: Each custom loader returns { autoload: boolean, getModel?, options }. If autoload=true OR provider already loaded, options are merged and loader registered.",
+    "PLUGIN AUTH TAKES PRECEDENCE: Plugin-provided auth can load providers even if not in database (via mergeProvider).",
+    "MODEL FILTERING CHAIN: Models go through: (1) Status filter (alpha requires flag, deprecated removed), (2) Config blacklist/whitelist, (3) Variant filtering (disabled variants removed). Applied at load time.",
+    "TUI SHOWS CONNECTED STATUS: dialog-model.tsx uses useConnected() to show popular providers when not connected. Uses fuzzy search for model discovery.",
+    "PROVIDER/MODEL PRIORITY: Models sorted by: gpt-5 > claude-sonnet-4 > big-pickle > gemini-3-pro (contains 'latest' versions ranked first).",
+    "OPENCODE PROVIDER SPECIAL: opencode provider (free tier) deletes all paid models if no API key. Free models always shown if opencode available.",
+    "VARIANT SYSTEM: Models can have variants (e.g., different region configs for bedrock). Variants disabled via config are filtered out.",
+    "CUSTOM FETCH WRAPPER: All provider SDKs wrapped with timeout handling, Azure ID stripping, and custom fetch support.",
+    "REGION HANDLING: Amazon Bedrock has complex region prefixing logic (us., eu., ap., au., jp., apac.) based on model and region config.",
+    "GITHUB COPILOT RESPONSES API: gpt-5+ models use responses() API instead of chat(). Special handling for gpt-5-mini and enterprise variants."
+  ]
+}
