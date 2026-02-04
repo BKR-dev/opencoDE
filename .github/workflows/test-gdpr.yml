@@ -4,9 +4,6 @@ on:
   pull_request:
     branches:
       - "gdpr/**"
-  push:
-    branches:
-      - "gdpr/**"
   workflow_dispatch:
 
 jobs:
