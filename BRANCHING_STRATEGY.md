@@ -15,26 +15,38 @@ upstream    -> git@github.com:anomalyxo/opencode.git (ORIGINAL REPO)
 
 ## Branch Strategy
 
-### 1. Main Branches (Synced with Upstream)
+### 1. Primary GDPR Branch
 
-- **`dev`** - Mirrors `anomalyxo/opencode:dev`
-  - Pull updates from upstream regularly
-  - NEVER push BKR-specific changes here
-  - Used as base for creating GDPR branches
+- **`gdpr/main`** - YOUR PRIMARY BRANCH (like upstream's dev)
+  - Contains all GDPR hardening code
+  - Receives upstream updates only on version tags (v2.0.0, etc.)
+  - Always builds GDPR-compliant binaries
+  - Protected: requires GDPR tests to pass
 
-### 2. GDPR Feature Branches (BKR-Specific)
+### 2. GDPR Release Branches (BKR-Specific)
 
 Use semantic versioning for GDPR releases:
 
-- **`gdpr/v1.0-build-hardening`** - Build-time GDPR hardening (current work)
+- **`gdpr/v1.0-build-hardening`** - Build-time GDPR hardening (initial release)
 - **`gdpr/v1.1-audit-enhancements`** - Future: Enhanced audit features
 - **`gdpr/v2.0-compliance-suite`** - Future: Full compliance toolkit
 
-### 3. Working Branches (Temporary)
+### 3. Sync Branches (Temporary)
 
-- **`feat/restrict-github-only`** - Current working branch (can be merged into `gdpr/v1.0-build-hardening`)
+- **`sync/upstream-v2.0.0`** - Created automatically when new upstream tag detected
+- Merged to `gdpr/main` after testing
+- Deleted after merge
+
+### 4. Working Branches (Temporary)
+
 - **`feat/*`** - Feature development (delete after merging to GDPR branch)
 - **`fix/*`** - Bug fixes specific to GDPR builds
+
+### 5. Upstream Mirror (Optional)
+
+- **`dev`** - Mirrors `anomalyxo/opencode:dev`
+  - NEVER push BKR-specific changes here
+  - Used for reference only
 
 ## Workflow
 
@@ -92,24 +104,71 @@ git push origin v1.0.0-gdpr
 # etc.
 ```
 
-### Syncing with Upstream (Pulling Updates)
+### Syncing with Upstream (Tag-Based Automated)
+
+**This fork uses TAG-BASED syncing** - only pulls from upstream when they release a new version tag.
+
+#### Automated Workflow (Recommended)
+
+1. **Trigger the sync manually** (no automatic cron jobs):
+
+   ```bash
+   # Go to GitHub Actions
+   # https://github.com/BKR-dev/opencoDE/actions/workflows/sync-upstream.yml
+   # Click "Run workflow"
+   # Enter upstream tag (e.g., v2.0.0)
+   # Click "Run workflow"
+   ```
+
+2. **GitHub Actions will**:
+   - Create branch: `sync/upstream-v2.0.0`
+   - Merge with GDPR-first strategy (`-X ours`)
+   - Create PR to `gdpr/main`
+   - Run GDPR compliance tests
+
+3. **You review the PR**:
+   - Check the automated test results
+   - Review changes locally (see below)
+   - Merge if tests pass
+
+#### Manual Sync (If Automation Fails)
 
 ```bash
-# Checkout dev branch
-git checkout dev
+# Add upstream remote (one-time)
+git remote add upstream https://github.com/anomalyxo/opencode.git
 
-# Pull from upstream (if remote is configured)
-git pull upstream dev
+# Fetch upstream tags
+git fetch upstream --tags
 
-# Push to your fork's dev
-git push origin dev
+# Create sync branch
+git checkout gdpr/main
+git checkout -b sync/upstream-v2.0.0
 
-# Rebase your GDPR branch on latest dev
-git checkout gdpr/v1.0-build-hardening
-git rebase dev
+# Merge with GDPR-first strategy (your code wins conflicts)
+git merge upstream/v2.0.0 -X ours
 
-# Resolve conflicts if any, then
-git push origin gdpr/v1.0-build-hardening --force-with-lease
+# If conflicts remain, use the helper script
+bun run script/resolve-gdpr-conflicts.ts
+
+# Test GDPR compliance
+cd packages/opencode
+bun test test/audit/gdpr-compliance.test.ts
+
+# If tests pass, push and create PR
+git push -u origin sync/upstream-v2.0.0
+# Then create PR via GitHub UI
+```
+
+#### After Merging Sync PR
+
+```bash
+# Tag the sync for history
+git checkout gdpr/main
+git pull origin gdpr/main
+git tag sync-v2.0.0 -m "Synced with upstream v2.0.0"
+git push origin sync-v2.0.0
+
+# Update sync history (see Sync History section below)
 ```
 
 ### Merging Working Branches
@@ -355,11 +414,15 @@ git remote -v
 # Check current branch
 git branch -vv
 
-# Create GDPR branch
-git checkout -b gdpr/v1.0-build-hardening
+# Trigger automated sync (via GitHub Actions UI)
+# https://github.com/BKR-dev/opencoDE/actions/workflows/sync-upstream.yml
 
-# Push to YOUR fork (safe)
-git push origin gdpr/v1.0-build-hardening
+# Manual sync if needed
+git fetch upstream --tags
+git checkout -b sync/upstream-v2.0.0
+git merge upstream/v2.0.0 -X ours
+bun run script/resolve-gdpr-conflicts.ts
+bun test test/audit/gdpr-compliance.test.ts
 
 # Build GDPR binaries
 make build-gdpr
@@ -370,3 +433,23 @@ git push origin v1.0.0-gdpr
 ```
 
 **Remember**: As long as you push to `origin`, you're pushing to YOUR fork (BKR-dev/opencoDE), NOT upstream. This is safe and correct. ✅
+
+---
+
+## Sync History
+
+Track all upstream syncs here for audit trail:
+
+| Sync Date  | Upstream Tag  | Sync Branch               | PR  | Status      | Notes                       |
+| ---------- | ------------- | ------------------------- | --- | ----------- | --------------------------- |
+| 2026-02-04 | v1.0.0 (fork) | gdpr/v1.0-build-hardening | -   | ✅ Complete | Initial GDPR implementation |
+| TBD        | v2.0.0        | sync/upstream-v2.0.0      | TBD | ⏳ Pending  | Awaiting upstream release   |
+
+**Instructions**: After each sync, add a row to this table with:
+
+- Date merged to gdpr/main
+- Upstream tag synced
+- Sync branch name
+- PR link
+- Status (✅ Complete, ⚠️ Had conflicts, ❌ Failed)
+- Notes about any issues or manual fixes needed

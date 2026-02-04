@@ -1,0 +1,223 @@
+name: Sync Upstream (Manual Trigger Only)
+
+on:
+  workflow_dispatch:
+    inputs:
+      upstream_tag:
+        description: "Upstream tag to sync (e.g., v2.0.0)"
+        required: true
+        type: string
+      create_pr:
+        description: "Create PR after sync"
+        required: true
+        type: boolean
+        default: true
+
+jobs:
+  check-fork:
+    runs-on: ubuntu-latest
+    outputs:
+      is_fork: ${{ steps.check.outputs.is_fork }}
+    steps:
+      - name: Verify this is BKR-dev fork
+        id: check
+        run: |
+          if [ "${{ github.repository }}" != "BKR-dev/opencoDE" ]; then
+            echo "ERROR: This workflow only runs in BKR-dev/opencoDE fork"
+            echo "Current repo: ${{ github.repository }}"
+            echo "is_fork=false" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+          echo "Running in BKR-dev fork"
+          echo "is_fork=true" >> $GITHUB_OUTPUT
+
+  sync-upstream:
+    needs: check-fork
+    if: needs.check-fork.outputs.is_fork == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout gdpr/main
+        uses: actions/checkout@v4
+        with:
+          ref: gdpr/main
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure git
+        run: |
+          git config user.name "GDPR Sync Bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Add upstream remote
+        run: |
+          git remote add upstream https://github.com/anomalyxo/opencode.git
+          git fetch upstream --tags
+          echo "Upstream remote added"
+
+      - name: Verify upstream tag exists
+        env:
+          TAG: ${{ github.event.inputs.upstream_tag }}
+        run: |
+          if ! git tag -l | grep -q "^${TAG}$"; then
+            git fetch upstream tag "$TAG" || {
+              echo "ERROR: Tag $TAG not found in upstream"
+              exit 1
+            }
+          fi
+          echo "Tag $TAG found"
+
+      - name: Create sync branch
+        env:
+          TAG: ${{ github.event.inputs.upstream_tag }}
+        run: |
+          BRANCH="sync/upstream-${TAG}"
+
+          if git ls-remote --heads origin "$BRANCH" | grep -q "$BRANCH"; then
+            echo "Branch $BRANCH already exists"
+            git fetch origin "$BRANCH"
+            git checkout "$BRANCH"
+            echo "branch_exists=true" >> $GITHUB_ENV
+          else
+            git checkout -b "$BRANCH"
+            echo "branch_exists=false" >> $GITHUB_ENV
+          fi
+
+          echo "sync_branch=$BRANCH" >> $GITHUB_ENV
+
+      - name: Merge upstream with GDPR-first strategy
+        env:
+          TAG: ${{ github.event.inputs.upstream_tag }}
+        run: |
+          echo "Merging upstream $TAG with GDPR-first strategy"
+
+          if git merge "upstream/$TAG" -X ours --no-commit --no-ff; then
+            echo "Clean merge (no conflicts)"
+            echo "has_conflicts=false" >> $GITHUB_ENV
+          else
+            echo "Merge had conflicts (resolved with GDPR-first)"
+            echo "has_conflicts=true" >> $GITHUB_ENV
+          fi
+
+          git add -A
+
+          if git diff --cached --quiet; then
+            echo "No changes to commit (already up to date)"
+            echo "has_changes=false" >> $GITHUB_ENV
+          else
+            echo "has_changes=true" >> $GITHUB_ENV
+            
+            cat > /tmp/commit-msg <<EOF
+          sync: merge upstream $TAG (GDPR-first strategy)
+
+          Upstream tag: $TAG
+          Strategy: ours (preserve GDPR code on conflict)
+          Repository: anomalyxo/opencode
+
+          Conflicts resolved automatically in favor of GDPR code.
+          Manual review recommended for:
+          - packages/opencode/src/provider/*
+          - packages/opencode/src/net/*
+          - packages/opencode/src/index.ts
+
+          Related docs: BRANCHING_STRATEGY.md, SYNC_CHECKLIST.md
+          EOF
+            
+            git commit -F /tmp/commit-msg
+            echo "Merge commit created"
+          fi
+
+      - name: Push sync branch
+        if: env.has_changes == 'true'
+        run: |
+          git push -u origin "${{ env.sync_branch }}"
+          echo "Pushed to origin/${{ env.sync_branch }}"
+
+      - name: Create Pull Request
+        if: env.has_changes == 'true' && github.event.inputs.create_pr == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.event.inputs.upstream_tag }}
+        run: |
+          if gh pr list --head "${{ env.sync_branch }}" --base gdpr/main | grep -q .; then
+            echo "PR already exists for ${{ env.sync_branch }}"
+            gh pr view "${{ env.sync_branch }}" --web || true
+            exit 0
+          fi
+
+          cat > /tmp/pr-body.md <<'EOF'
+          ## Upstream Sync
+
+          This PR merges upstream changes using GDPR-first conflict resolution.
+
+          ### Merge Strategy
+          - Method: git merge -X ours (GDPR code wins conflicts)
+          - Had conflicts: CONFLICTS_PLACEHOLDER
+          - Upstream tag: TAG_PLACEHOLDER
+
+          ### Review Checklist
+
+          See SYNC_CHECKLIST.md for detailed steps.
+
+          #### Code Review
+          - [ ] GDPR-critical files unchanged
+          - [ ] GDPR function calls preserved
+          - [ ] No new providers without blocking
+          - [ ] No new network calls without audit
+
+          #### Testing Required
+
+          Run locally:
+
+              git checkout BRANCH_PLACEHOLDER
+              cd packages/opencode
+              bun test test/audit/gdpr-compliance.test.ts
+              bun run build:gdpr-single
+              ./dist/opencode-darwin-arm64-gdpr/bin/opencode auth list
+
+          #### Merge Decision
+          - [ ] All GDPR tests pass
+          - [ ] GDPR binary builds
+          - [ ] GDPR status verified
+          - [ ] Tamper-proofing works
+
+          ### Documentation
+          - BRANCHING_STRATEGY.md
+          - SYNC_CHECKLIST.md
+          - GDPR_BUILD_HARDENING.md
+
+          Note: This sync was triggered manually. No automatic workflows run in this fork.
+          EOF
+
+          sed -i "s/TAG_PLACEHOLDER/$TAG/g" /tmp/pr-body.md
+          sed -i "s/CONFLICTS_PLACEHOLDER/${{ env.has_conflicts }}/g" /tmp/pr-body.md
+          sed -i "s/BRANCH_PLACEHOLDER/${{ env.sync_branch }}/g" /tmp/pr-body.md
+
+          gh pr create \
+            --base gdpr/main \
+            --head "${{ env.sync_branch }}" \
+            --title "Sync upstream $TAG (GDPR-first)" \
+            --body-file /tmp/pr-body.md \
+            --label "upstream-sync" \
+            --label "needs-review"
+
+          echo "PR created"
+
+      - name: Summary
+        run: |
+          echo "## Sync Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- Upstream tag: ${{ github.event.inputs.upstream_tag }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Sync branch: ${{ env.sync_branch }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Has changes: ${{ env.has_changes }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Had conflicts: ${{ env.has_conflicts }}" >> $GITHUB_STEP_SUMMARY
+          echo "- PR created: ${{ github.event.inputs.create_pr }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ env.has_changes }}" = "true" ]; then
+            echo "Sync completed. Review the PR and run GDPR tests locally." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "No changes needed. Already up to date with upstream." >> $GITHUB_STEP_SUMMARY
+          fi
