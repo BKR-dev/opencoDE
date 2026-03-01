@@ -3,6 +3,7 @@ import fuzzysort from "fuzzysort"
 import { Config } from "../config/config"
 import { mapValues, mergeDeep, omit, pickBy, sortBy } from "remeda"
 import { NoSuchModelError, type Provider as SDK } from "ai"
+import { type LanguageModelV2 } from "@ai-sdk/provider"
 import { Log } from "../util/log"
 import { BunProc } from "../bun"
 import { Plugin } from "../plugin"
@@ -38,7 +39,7 @@ export namespace Provider {
     return isGpt5OrLater(modelID) && !modelID.startsWith("gpt-5-mini")
   }
 
-  const BUNDLED_PROVIDERS: Record<string, (options: any) => SDK> = {
+  const BUNDLED_PROVIDERS: Record<string, (options?: any) => any> = {
     "@ai-sdk/github-copilot": createGitHubCopilotOpenAICompatible,
   }
 

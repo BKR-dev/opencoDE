@@ -243,15 +243,17 @@ packages/opencode/src/
 
 ## Documentation Index
 
-| File                        | Purpose                         |
-| --------------------------- | ------------------------------- |
-| `GDPR_EXECUTIVE_SUMMARY.md` | Board-level compliance overview |
-| `GDPR_PROVIDER_AUDIT.md`    | Detailed provider/API analysis  |
-| `GDPR_BUILD_HARDENING.md`   | Build-time hardening guide      |
-| `GDPR_FORK_MAINTENANCE.md`  | Fork maintenance procedures     |
-| `NETWORK_AUDIT_MODE.md`     | Audit mode usage guide          |
-| `GDPR_QUICK_REFERENCE.md`   | Quick compliance checklist      |
-| `SYNC_CHECKLIST.md`         | Upstream sync procedures        |
+| File                               | Purpose                             | Audience        |
+| ---------------------------------- | ----------------------------------- | --------------- |
+| `GDPR_EXECUTIVE_SUMMARY.md`        | Business value proposition          | C-Suite, Buyers |
+| `GDPR_ONE_PAGER.md`                | Quick reference for decision makers | Executives      |
+| `GDPR_COMPLIANCE_CERTIFICATION.md` | Official compliance documentation   | DPOs, Auditors  |
+| `GDPR_PROVIDER_AUDIT.md`           | Detailed provider/API analysis      | Technical Leads |
+| `GDPR_BUILD_HARDENING.md`          | Build-time hardening guide          | Engineers       |
+| `GDPR_FORK_MAINTENANCE.md`         | Fork maintenance procedures         | DevOps          |
+| `NETWORK_AUDIT_MODE.md`            | Audit mode usage guide              | Security Teams  |
+| `GDPR_QUICK_REFERENCE.md`          | Quick compliance checklist          | All Users       |
+| `SYNC_CHECKLIST.md`                | Upstream sync procedures            | Maintainers     |
 
 ---
 
@@ -626,7 +628,7 @@ Before considering this document accurate, verify:
 | Build commands exist | `grep -c "build:gdpr" packages/opencode/package.json`             | ≥1          |
 | Workflow exists      | `ls .github/workflows/sync-upstream.yml`                          | file exists |
 | Conflict resolver    | `ls script/resolve-gdpr-conflicts.ts`                             | file exists |
-| GDPR docs            | `ls GDPR_*.md \| wc -l`                                           | ≥6          |
+| GDPR docs            | `ls GDPR_*.md \| wc -l`                                           | ≥8          |
 | Default branch       | `git branch --show-current`                                       | gdpr/main   |
 
 ### Self-Improvement Prompts for AI Models
@@ -707,6 +709,7 @@ ls .github/workflows/sync-upstream.yml .github/workflows/test-gdpr.yml
 |            | - Added step-by-step sync instructions |              |
 |            | - Added self-improvement section       |              |
 |            | - Added quick agent onboarding         |              |
+|            | - Added marketing docs for C-suite     |              |
 
 ### Suggestions for Future Improvements
 
