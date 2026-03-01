@@ -687,8 +687,8 @@ ls .github/workflows/sync-upstream.yml .github/workflows/test-gdpr.yml
 
 | Metric            | Current Value      | Last Verified |
 | ----------------- | ------------------ | ------------- |
-| Total lines       | 601                | 2026-03-01    |
-| Sections          | 14                 | 2026-03-01    |
+| Total lines       | 731                | 2026-03-01    |
+| Sections          | 15                 | 2026-03-01    |
 | GDPR tests        | 17                 | 2026-03-01    |
 | Build modes       | 2 (standard, gdpr) | 2026-03-01    |
 | Workflows         | 2 (sync, test)     | 2026-03-01    |
@@ -706,6 +706,7 @@ ls .github/workflows/sync-upstream.yml .github/workflows/test-gdpr.yml
 |            | - Added upstream sync strategy         |              |
 |            | - Added step-by-step sync instructions |              |
 |            | - Added self-improvement section       |              |
+|            | - Added quick agent onboarding         |              |
 
 ### Suggestions for Future Improvements
 
