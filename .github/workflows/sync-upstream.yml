@@ -15,20 +15,19 @@ permissions:
   pull-requests: write
 
 jobs:
-  sync:
+  check:
     runs-on: ubuntu-latest
+    outputs:
+      needed: ${{ steps.check.outputs.needed }}
+      current: ${{ steps.current.outputs.tag }}
+      upstream: ${{ steps.upstream.outputs.tag }}
     steps:
       - name: Checkout gdpr/main
         uses: actions/checkout@v4
         with:
           ref: gdpr/main
-          fetch-depth: 0
+          fetch-depth: 1
           token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Configure git
-        run: |
-          git config user.name "GDPR Sync Bot"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
       - name: Read current synced tag
         id: current
@@ -57,33 +56,60 @@ jobs:
           CURRENT="${{ steps.current.outputs.tag }}"
           UPSTREAM="${{ steps.upstream.outputs.tag }}"
           if [ "$CURRENT" = "$UPSTREAM" ]; then
-            echo "Already up to date with $UPSTREAM — nothing to do"
+            echo "Already up to date with $UPSTREAM — no sync needed"
             echo "needed=false" >> $GITHUB_OUTPUT
           else
             echo "New upstream release: $UPSTREAM (current: $CURRENT)"
             echo "needed=true" >> $GITHUB_OUTPUT
           fi
 
+      - name: Job summary
+        run: |
+          NEEDED="${{ steps.check.outputs.needed }}"
+          CURRENT="${{ steps.current.outputs.tag }}"
+          UPSTREAM="${{ steps.upstream.outputs.tag }}"
+          if [ "$NEEDED" = "true" ]; then
+            echo "## New upstream release detected: $UPSTREAM" >> $GITHUB_STEP_SUMMARY
+            echo "Sync job will run." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "## Up to date ($CURRENT)" >> $GITHUB_STEP_SUMMARY
+            echo "No sync needed." >> $GITHUB_STEP_SUMMARY
+          fi
+
+  sync:
+    needs: check
+    if: needs.check.outputs.needed == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout gdpr/main
+        uses: actions/checkout@v4
+        with:
+          ref: gdpr/main
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure git
+        run: |
+          git config user.name "GDPR Sync Bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
       - name: Add upstream remote and fetch tag
-        if: steps.check.outputs.needed == 'true'
         run: |
           git remote add upstream https://github.com/anomalyco/opencode.git
-          git fetch upstream refs/tags/${{ steps.upstream.outputs.tag }}:refs/tags/${{ steps.upstream.outputs.tag }}
+          git fetch upstream refs/tags/${{ needs.check.outputs.upstream }}:refs/tags/${{ needs.check.outputs.upstream }}
 
       - name: Create sync branch
-        if: steps.check.outputs.needed == 'true'
         id: branch
         run: |
-          TAG="${{ steps.upstream.outputs.tag }}"
+          TAG="${{ needs.check.outputs.upstream }}"
           BRANCH="sync/upstream-${TAG}"
           git checkout -b "$BRANCH"
           echo "name=$BRANCH" >> $GITHUB_OUTPUT
 
       - name: Merge upstream tag (GDPR-first)
-        if: steps.check.outputs.needed == 'true'
         id: merge
         run: |
-          TAG="${{ steps.upstream.outputs.tag }}"
+          TAG="${{ needs.check.outputs.upstream }}"
           # -X ours: on conflict, keep our (GDPR fork) version
           # --allow-unrelated-histories: safe for tag-based merges
           # Never abort — conflict markers are committed as-is
@@ -98,31 +124,26 @@ jobs:
           fi
 
       - name: Push sync branch
-        if: steps.check.outputs.needed == 'true'
         run: |
           git push -u origin "${{ steps.branch.outputs.name }}"
 
       - name: Get list of files changed upstream
-        if: steps.check.outputs.needed == 'true'
         id: changed
         run: |
-          TAG="${{ steps.upstream.outputs.tag }}"
-          CURRENT="${{ steps.current.outputs.tag }}"
+          TAG="${{ needs.check.outputs.upstream }}"
+          CURRENT="${{ needs.check.outputs.current }}"
           FILES=$(git diff --name-only "refs/tags/$CURRENT" "refs/tags/$TAG" 2>/dev/null | head -40 || echo "(could not compute diff)")
-          # Escape for multiline output
           echo "files<<EOF" >> $GITHUB_OUTPUT
           echo "$FILES" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Open PR
-        if: steps.check.outputs.needed == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ steps.upstream.outputs.tag }}
+          TAG: ${{ needs.check.outputs.upstream }}
           BRANCH: ${{ steps.branch.outputs.name }}
           CONFLICTS: ${{ steps.merge.outputs.conflicts }}
         run: |
-          CONFLICT_NOTE=""
           if [ "$CONFLICTS" = "true" ]; then
             CONFLICT_NOTE="⚠️ **Conflicts detected.** Conflict markers are present in the branch. Resolve them before merging."
           else
@@ -168,12 +189,6 @@ After validation, update \`.github/upstream-version\` to \`$TAG\` and merge."
 
       - name: Job summary
         run: |
-          NEEDED="${{ steps.check.outputs.needed }}"
-          if [ "$NEEDED" = "true" ]; then
-            echo "## Sync triggered for ${{ steps.upstream.outputs.tag }}" >> $GITHUB_STEP_SUMMARY
-            echo "PR opened targeting gdpr/main." >> $GITHUB_STEP_SUMMARY
-            echo "Conflicts: ${{ steps.merge.outputs.conflicts }}" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "## Already up to date" >> $GITHUB_STEP_SUMMARY
-            echo "Current synced tag: ${{ steps.current.outputs.tag }}" >> $GITHUB_STEP_SUMMARY
-          fi
+          echo "## Sync PR opened for ${{ needs.check.outputs.upstream }}" >> $GITHUB_STEP_SUMMARY
+          echo "Branch: ${{ steps.branch.outputs.name }}" >> $GITHUB_STEP_SUMMARY
+          echo "Conflicts: ${{ steps.merge.outputs.conflicts }}" >> $GITHUB_STEP_SUMMARY
