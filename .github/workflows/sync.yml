@@ -9,79 +9,79 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Upstream tag to sync (e.g. v1.3.0). Leave empty for latest."
+        description: "Upstream tag to sync (leave empty for latest)"
         required: false
         type: string
-
-permissions:
-  contents: write
-  pull-requests: write
 
 jobs:
   sync:
     runs-on: ubuntu-latest
-    env:
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    permissions:
+      contents: write
+      pull-requests: write
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Resolve tags
-        id: tags
+      - name: Resolve versions
+        id: ver
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          INPUT_TAG: ${{ inputs.tag }}
         run: |
           CURRENT=$(cat .github/upstream-version)
-          if [ -n "${{ github.event.inputs.tag }}" ]; then
-            UPSTREAM="${{ github.event.inputs.tag }}"
+          if [ -n "$INPUT_TAG" ]; then
+            UPSTREAM="$INPUT_TAG"
           else
             UPSTREAM=$(gh api repos/anomalyco/opencode/releases/latest --jq '.tag_name')
           fi
-          echo "current=$CURRENT" >> $GITHUB_OUTPUT
-          echo "upstream=$UPSTREAM" >> $GITHUB_OUTPUT
-          echo "needed=$([ "$CURRENT" != "$UPSTREAM" ] && echo true || echo false)" >> $GITHUB_OUTPUT
+          echo "current=$CURRENT" >> "$GITHUB_OUTPUT"
+          echo "upstream=$UPSTREAM" >> "$GITHUB_OUTPUT"
+          if [ "$CURRENT" = "$UPSTREAM" ]; then
+            echo "needed=false" >> "$GITHUB_OUTPUT"
+            echo "Already at $CURRENT — no sync needed."
+          else
+            echo "needed=true" >> "$GITHUB_OUTPUT"
+            echo "New release: $UPSTREAM (current: $CURRENT)"
+          fi
 
-      - name: Already up to date
-        if: steps.tags.outputs.needed == 'false'
-        run: echo "Already at ${{ steps.tags.outputs.current }} — nothing to do."
-
-      - name: Create sync branch
-        if: steps.tags.outputs.needed == 'true'
-        id: branch
+      - name: Create sync branch and merge
+        if: steps.ver.outputs.needed == 'true'
+        id: merge
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TAG="${{ steps.tags.outputs.upstream }}"
+          TAG="${{ steps.ver.outputs.upstream }}"
+          BRANCH="sync/upstream-$TAG"
           git config user.name "GDPR Sync Bot"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git remote add upstream https://github.com/anomalyco/opencode.git
           git fetch upstream "refs/tags/$TAG:refs/tags/$TAG"
-          git checkout -b "sync/upstream-$TAG"
-          echo "name=sync/upstream-$TAG" >> $GITHUB_OUTPUT
-
-      - name: Merge (GDPR-first)
-        if: steps.tags.outputs.needed == 'true'
-        id: merge
-        run: |
-          TAG="${{ steps.tags.outputs.upstream }}"
+          git checkout -b "$BRANCH"
           if git merge "refs/tags/$TAG" -X ours --no-edit --allow-unrelated-histories; then
-            echo "conflicts=false" >> $GITHUB_OUTPUT
+            echo "conflicts=false" >> "$GITHUB_OUTPUT"
           else
             git add -A
             git commit -m "sync: merge upstream $TAG (conflicts present)"
-            echo "conflicts=true" >> $GITHUB_OUTPUT
+            echo "conflicts=true" >> "$GITHUB_OUTPUT"
           fi
+          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
 
-      - name: Push and open PR
-        if: steps.tags.outputs.needed == 'true'
+      - name: Push branch and open PR
+        if: steps.ver.outputs.needed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TAG="${{ steps.tags.outputs.upstream }}"
-          BRANCH="${{ steps.branch.outputs.name }}"
+          TAG="${{ steps.ver.outputs.upstream }}"
+          CURRENT="${{ steps.ver.outputs.current }}"
+          BRANCH="${{ steps.merge.outputs.branch }}"
           CONFLICTS="${{ steps.merge.outputs.conflicts }}"
-          CURRENT="${{ steps.tags.outputs.current }}"
           git push -u origin "$BRANCH"
           CHANGED=$(git diff --name-only "refs/tags/$CURRENT" "refs/tags/$TAG" 2>/dev/null | head -40 || echo "")
+          NOTE="Clean merge."
           if [ "$CONFLICTS" = "true" ]; then
             NOTE="Conflicts present — resolve before merging."
-          else
-            NOTE="Clean merge."
           fi
           gh pr create \
             --base gdpr/main \
@@ -91,20 +91,16 @@ jobs:
 
 $NOTE
 
-**Changed files (upstream):**
+Changed files:
 \`\`\`
 $CHANGED
 \`\`\`
 
-**GDPR-critical files to review:**
-- \`src/gdpr/build-constants.ts\`
-- \`src/net/egress-policy.ts\`
-- \`src/provider/provider.ts\`
-- \`src/audit/gdpr.ts\`
-- \`src/audit/network.ts\`
+GDPR-critical files to review:
+- src/gdpr/build-constants.ts
+- src/net/egress-policy.ts
+- src/provider/provider.ts
+- src/audit/gdpr.ts
 
-**Validate:** \`git checkout $BRANCH && make validate-gdpr\`
-
-After validation: update \`.github/upstream-version\` to \`$TAG\` and merge."
-
- 
+Validate: git checkout $BRANCH && make validate-gdpr
+After validation: update .github/upstream-version to $TAG and merge."
