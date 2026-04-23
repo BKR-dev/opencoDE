@@ -103,3 +103,4 @@ $CHANGED
 **Validate:** \`git checkout $BRANCH && make validate-gdpr\`
 
 After validation: update \`.github/upstream-version\` to \`$TAG\` and merge."
+
