@@ -272,7 +272,7 @@ validate-gdpr: build-gdpr-single
 	@echo "$(GREEN)Running GDPR audit validation session...$(NC)"
 	@echo "$(YELLOW)This runs a real LLM session — requires GitHub Copilot authentication$(NC)"
 	@echo ""
-	@BINARY=$$(find packages/opencode/dist -name "opencode*-gdpr" -type f -perm +111 2>/dev/null | head -1); \
+	@BINARY=$$(find packages/opencode/dist -path "*-gdpr/bin/opencode" -type f -perm +111 2>/dev/null | head -1); \
 	if [ -z "$$BINARY" ]; then \
 		echo "$(RED)ERROR: GDPR binary not found. Run 'make build-gdpr-single' first.$(NC)"; \
 		exit 1; \
