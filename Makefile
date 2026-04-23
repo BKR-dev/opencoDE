@@ -5,6 +5,7 @@
 .PHONY: test-unit test-integration test-coverage test-watch
 .PHONY: git-check git-sync dev publish
 .PHONY: test-gdpr verify-gdpr gdpr-report validate-gdpr
+.PHONY: sync-trigger sync-checkout sync-validate sync-merge
 .PHONY: build-gdpr build-gdpr-single
 .DEFAULT_GOAL := help
 
@@ -49,6 +50,12 @@ help:
 	@echo "  verify-gdpr     Verify GDPR compliance (tests + code checks)"
 	@echo "  validate-gdpr   Build GDPR binary and run real audit session (local smoke test)"
 	@echo "  gdpr-report     Generate GDPR compliance report"
+	@echo ""
+	@echo "Upstream Sync (run in order):"
+	@echo "  sync-trigger    Step 1: Trigger upstream sync workflow on GitHub"
+	@echo "  sync-checkout   Step 2: Checkout the sync branch (TAG=vX.X.X required)"
+	@echo "  sync-validate   Step 3: Build GDPR binary and run audit validation"
+	@echo "  sync-merge      Step 4: Merge the open sync PR"
 	@echo ""
 	@echo "Git Operations:"
 	@echo "  git-check       Verify git configuration is correct"
@@ -289,6 +296,62 @@ validate-gdpr: build-gdpr-single
 	echo ""; \
 	echo "Inspect with:"; \
 	echo "  cat <audit-log-path> | jq ."
+
+## sync-trigger: Step 1 — trigger the upstream sync workflow on GitHub Actions
+sync-trigger:
+	@echo "$(GREEN)Triggering upstream sync workflow...$(NC)"
+	@if ! command -v gh >/dev/null 2>&1; then \
+		echo "$(RED)ERROR: gh CLI not found. Install from https://cli.github.com$(NC)"; \
+		exit 1; \
+	fi
+	gh workflow run sync-upstream.yml --repo BKR-dev/opencoDE
+	@echo ""
+	@echo "Workflow dispatched. Monitor progress at:"
+	@echo "  https://github.com/BKR-dev/opencoDE/actions/workflows/sync-upstream.yml"
+	@echo ""
+	@echo "Once the PR is open, run: make sync-checkout TAG=vX.X.X"
+
+## sync-checkout: Step 2 — fetch origin and checkout the sync branch (TAG=vX.X.X required)
+sync-checkout:
+	@if [ -z "$(TAG)" ]; then \
+		echo "$(RED)ERROR: TAG is required. Usage: make sync-checkout TAG=vX.X.X$(NC)"; \
+		exit 1; \
+	fi
+	@echo "$(GREEN)Checking out sync branch for $(TAG)...$(NC)"
+	git fetch origin
+	git checkout sync/upstream-$(TAG)
+	@echo ""
+	@echo "$(GREEN)On branch sync/upstream-$(TAG)$(NC)"
+	@echo "Review the diff, then run: make sync-validate"
+
+## sync-validate: Step 3 — build GDPR binary and run audit validation on the sync branch
+sync-validate: validate-gdpr
+	@echo ""
+	@echo "$(GREEN)Sync validation complete.$(NC)"
+	@echo "If the session looked clean, run: make sync-merge"
+
+## sync-merge: Step 4 — merge the open sync PR via gh CLI
+sync-merge:
+	@echo "$(GREEN)Merging open sync PR...$(NC)"
+	@if ! command -v gh >/dev/null 2>&1; then \
+		echo "$(RED)ERROR: gh CLI not found. Install from https://cli.github.com$(NC)"; \
+		exit 1; \
+	fi
+	@PR=$$(gh pr list --repo BKR-dev/opencoDE --head "sync/upstream-" --json number,title --jq '.[0].number' 2>/dev/null); \
+	if [ -z "$$PR" ]; then \
+		echo "$(RED)ERROR: No open sync PR found. Check: gh pr list --repo BKR-dev/opencoDE$(NC)"; \
+		exit 1; \
+	fi; \
+	echo "Merging PR #$$PR..."; \
+	gh pr merge $$PR --repo BKR-dev/opencoDE --merge --delete-branch
+	@echo ""
+	@echo "$(GREEN)PR merged.$(NC)"
+	@echo ""
+	@echo "$(YELLOW)Final step: update upstream-version file and push:$(NC)"
+	@echo "  echo \"vX.X.X\" > .github/upstream-version"
+	@echo "  git add .github/upstream-version"
+	@echo "  git commit -m \"chore: update upstream-version to vX.X.X post-merge\""
+	@echo "  git push origin gdpr/main"
 
 ## gdpr-report: Generate GDPR compliance report
 gdpr-report:
