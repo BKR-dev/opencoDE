@@ -5,7 +5,7 @@
 .PHONY: test-unit test-integration test-coverage test-watch
 .PHONY: git-check git-sync dev publish
 .PHONY: test-gdpr verify-gdpr gdpr-report validate-gdpr
-.PHONY: sync-trigger sync-checkout sync-validate sync-merge
+.PHONY: sync-check sync-checkout sync-validate sync-merge
 .PHONY: build-gdpr build-gdpr-single
 .DEFAULT_GOAL := help
 
@@ -51,11 +51,11 @@ help:
 	@echo "  validate-gdpr   Build GDPR binary and run real audit session (local smoke test)"
 	@echo "  gdpr-report     Generate GDPR compliance report"
 	@echo ""
-	@echo "Upstream Sync (run in order):"
-	@echo "  sync-trigger    Step 1: Trigger upstream sync workflow on GitHub"
-	@echo "  sync-checkout   Step 2: Checkout the sync branch (TAG=vX.X.X required)"
-	@echo "  sync-validate   Step 3: Build GDPR binary and run audit validation"
-	@echo "  sync-merge      Step 4: Merge the open sync PR"
+	@echo "Upstream Sync:"
+	@echo "  sync-check      Check upstream and open a PR if a new release exists (run via cron)"
+	@echo "  sync-checkout   Checkout the sync branch locally (TAG=vX.X.X required)"
+	@echo "  sync-validate   Build GDPR binary and run audit validation on the sync branch"
+	@echo "  sync-merge      Merge the open sync PR"
 	@echo ""
 	@echo "Git Operations:"
 	@echo "  git-check       Verify git configuration is correct"
@@ -297,21 +297,67 @@ validate-gdpr: build-gdpr-single
 	echo "Inspect with:"; \
 	echo "  cat <audit-log-path> | jq ."
 
-## sync-trigger: Step 1 — trigger the upstream sync workflow on GitHub Actions
-sync-trigger:
-	@echo "$(GREEN)Triggering upstream sync workflow...$(NC)"
+## sync-check: Check for new upstream release and open a PR if one exists (safe to run via cron)
+## Usage: make sync-check              # uses latest upstream release
+##        make sync-check TAG=v1.14.0  # targets a specific tag
+sync-check:
 	@if ! command -v gh >/dev/null 2>&1; then \
 		echo "$(RED)ERROR: gh CLI not found. Install from https://cli.github.com$(NC)"; \
 		exit 1; \
 	fi
-	gh workflow run sync-upstream.yml --repo BKR-dev/opencoDE
-	@echo ""
-	@echo "Workflow dispatched. Monitor progress at:"
-	@echo "  https://github.com/BKR-dev/opencoDE/actions/workflows/sync-upstream.yml"
-	@echo ""
-	@echo "Once the PR is open, run: make sync-checkout TAG=vX.X.X"
+	@CURRENT=$$(cat .github/upstream-version); \
+	if [ -n "$(TAG)" ]; then \
+		UPSTREAM="$(TAG)"; \
+	else \
+		UPSTREAM=$$(gh api repos/anomalyco/opencode/releases/latest --jq '.tag_name'); \
+	fi; \
+	echo "Current: $$CURRENT  Upstream: $$UPSTREAM"; \
+	if [ "$$CURRENT" = "$$UPSTREAM" ]; then \
+		echo "$(GREEN)Already up to date with $$UPSTREAM — nothing to do.$(NC)"; \
+		exit 0; \
+	fi; \
+	echo "$(YELLOW)New release detected: $$UPSTREAM$(NC)"; \
+	BRANCH="sync/upstream-$$UPSTREAM"; \
+	git config user.name "GDPR Sync Bot"; \
+	git config user.email "41898282+github-actions[bot]@users.noreply.github.com"; \
+	git remote get-url upstream >/dev/null 2>&1 || git remote add upstream https://github.com/anomalyco/opencode.git; \
+	git fetch upstream "refs/tags/$$UPSTREAM:refs/tags/$$UPSTREAM"; \
+	git checkout gdpr/main; \
+	git checkout -b "$$BRANCH"; \
+	CONFLICTS=false; \
+	if ! git merge "refs/tags/$$UPSTREAM" -X ours --no-edit --allow-unrelated-histories; then \
+		git add -A; \
+		git commit -m "sync: merge upstream $$UPSTREAM (conflicts present)"; \
+		CONFLICTS=true; \
+	fi; \
+	git push -u origin "$$BRANCH"; \
+	CHANGED=$$(git diff --name-only "refs/tags/$$CURRENT" "refs/tags/$$UPSTREAM" 2>/dev/null | head -40 || echo ""); \
+	NOTE="Clean merge."; \
+	if [ "$$CONFLICTS" = "true" ]; then NOTE="Conflicts present — resolve before merging."; fi; \
+	gh pr create \
+		--base gdpr/main \
+		--head "$$BRANCH" \
+		--title "sync: upstream $$UPSTREAM" \
+		--body "## Upstream sync: $$UPSTREAM
 
-## sync-checkout: Step 2 — fetch origin and checkout the sync branch (TAG=vX.X.X required)
+$$NOTE
+
+Changed files:
+\`\`\`
+$$CHANGED
+\`\`\`
+
+GDPR-critical files to review:
+- src/gdpr/build-constants.ts
+- src/net/egress-policy.ts
+- src/provider/provider.ts
+- src/audit/gdpr.ts
+
+Validate: git checkout $$BRANCH && make validate-gdpr
+After validation: update .github/upstream-version to $$UPSTREAM and merge."; \
+	echo "$(GREEN)PR opened for $$UPSTREAM$(NC)"
+
+## sync-checkout: Checkout an open sync branch locally (TAG=vX.X.X required)
 sync-checkout:
 	@if [ -z "$(TAG)" ]; then \
 		echo "$(RED)ERROR: TAG is required. Usage: make sync-checkout TAG=vX.X.X$(NC)"; \

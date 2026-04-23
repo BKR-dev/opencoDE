@@ -1,137 +1,124 @@
 # How to Update the GDPR Fork
 
-This document describes the full workflow for syncing a new upstream release from
-`anomalyco/opencode` into this GDPR-hardened fork.
+Sync is driven by a local `make` command — no GitHub Actions workflow involved.
 
 ---
 
-## Automated path (normal case)
-
-CI runs daily at 06:00 UTC and opens a PR automatically when a new release is
-detected. If the PR is open, start at Step 3.
-
-```
-Step 1  make sync-trigger          # manually dispatch the workflow (optional)
-Step 2  make sync-checkout TAG=vX.X.X
-Step 3  make sync-validate         # builds GDPR binary, runs --audit session
-Step 4  make sync-merge            # merges the PR via gh CLI
-Step 5  update .github/upstream-version  (see below)
-```
-
----
-
-## Step-by-step
-
-### 1. Trigger (optional)
-
-CI runs automatically. If you want to trigger it right now:
+## Normal workflow
 
 ```bash
-make sync-trigger
-```
+# Step 1: check for a new release and open a PR (also schedulable via cron)
+make sync-check
 
-Watch progress at:
-<https://github.com/BKR-dev/opencoDE/actions/workflows/sync-upstream.yml>
+# Step 2: review and checkout the branch
+make sync-checkout TAG=v1.14.21
 
-### 2. Checkout the sync branch
-
-Once the PR is open:
-
-```bash
-make sync-checkout TAG=v1.14.21   # replace with the actual version
-```
-
-Review the diff. Pay special attention to the GDPR-critical files listed in
-`AGENTS.md`. The merge used `-X ours`, so GDPR fork changes win conflicts, but
-verify that nothing was unexpectedly dropped.
-
-**GDPR-critical files to check after every sync:**
-
-| File | What to verify |
-|---|---|
-| `src/gdpr/build-constants.ts` | Build-time flags intact |
-| `src/net/egress-policy.ts` | `isExternalAPIBlocked()` calls present |
-| `src/provider/provider.ts` | `isGitHubOnlyMode()` calls present |
-| `src/provider/models.ts` | `isGitHubOnlyMode()` blocks models.dev |
-| `src/audit/gdpr.ts` | GDPR audit event functions present |
-| `src/audit/network.ts` | Network request logging intact |
-| `src/index.ts` | `--audit` flag and `logGDPRStatus()` present |
-| `src/tool/webfetch.ts` | `isGitHubOnlyMode()` check present |
-| `src/tool/websearch.ts` | `isGitHubOnlyMode()` check present |
-| `src/share/share.ts` | Session sharing disabled in GDPR mode |
-
-### 3. Validate
-
-Build the GDPR binary and run a real audit session:
-
-```bash
+# Step 3: validate GDPR compliance
 make sync-validate
-```
 
-This runs `make validate-gdpr` which:
-1. Builds the GDPR binary (`build-gdpr-single`)
-2. Runs a one-shot `--audit` session against GitHub Copilot
-3. Prints the audit log location
-
-Inspect the audit log:
-
-```bash
-cat <audit-log-path> | jq .
-```
-
-Confirm:
-- All requests go only to `api.github.com` or `raw.githubusercontent.com`
-- No requests to OpenAI, Anthropic, Google, or any other external host
-- Audit events are present and structured
-
-Also run the code-level checks:
-
-```bash
-make verify-gdpr
-```
-
-### 4. Merge
-
-```bash
+# Step 4: merge the PR
 make sync-merge
-```
 
-This merges the PR and deletes the sync branch via `gh pr merge`.
-
-### 5. Update upstream-version
-
-After merging, record the new upstream version:
-
-```bash
+# Step 5: record the new version
 echo "v1.14.21" > .github/upstream-version
 git add .github/upstream-version
 git commit -m "chore: update upstream-version to v1.14.21 post-merge"
 git push origin gdpr/main
 ```
 
-This prevents CI from opening duplicate PRs for the same release.
+---
+
+## Running sync-check via cron
+
+`make sync-check` is safe to run on a schedule — it exits 0 with no side effects if already up to date.
+
+Example crontab (daily at 06:00, logged to `/var/log/opencode-sync.log`):
+
+```
+0 6 * * * cd /path/to/opencoDE && make sync-check >> /var/log/opencode-sync.log 2>&1
+```
+
+Requires `gh` CLI to be authenticated (`gh auth login`) for the user running the cron job.
 
 ---
 
-## Manual conflict resolution
+## Step-by-step detail
 
-If the sync PR has conflict markers (possible when upstream changed a
-GDPR-critical file), resolve them manually on the sync branch before merging:
+### sync-check
+
+Reads `.github/upstream-version`, fetches the latest release from `anomalyco/opencode`, and if ahead:
+- Creates `sync/upstream-vX.X.X` from `gdpr/main`
+- Merges the upstream tag with `-X ours` (GDPR fork always wins conflicts)
+- Pushes the branch and opens a PR
+
+Target a specific tag instead of latest:
+
+```bash
+make sync-check TAG=v1.14.21
+```
+
+### sync-checkout
+
+```bash
+make sync-checkout TAG=v1.14.21
+```
+
+Fetches origin and checks out the sync branch. Review the diff — pay attention to GDPR-critical files:
+
+| File | What to verify |
+|---|---|
+| `src/gdpr/build-constants.ts` | Build-time flags intact |
+| `src/net/egress-policy.ts` | `isExternalAPIBlocked()` present |
+| `src/provider/provider.ts` | `isGitHubOnlyMode()` present |
+| `src/audit/gdpr.ts` | Audit functions present |
+| `src/audit/network.ts` | Network logging intact |
+
+### sync-validate
+
+```bash
+make sync-validate
+```
+
+Builds the GDPR binary and runs a real `--audit` session. Inspect the audit log:
+
+```bash
+cat <audit-log-path> | jq .
+```
+
+Confirm all requests go only to `api.github.com` or `raw.githubusercontent.com`.
+
+Also run code-level checks:
+
+```bash
+make verify-gdpr
+```
+
+### sync-merge
+
+```bash
+make sync-merge
+```
+
+Finds the open sync PR and merges it via `gh pr merge`.
+
+---
+
+## Conflict resolution
+
+If the PR has conflict markers:
 
 ```bash
 git checkout sync/upstream-vX.X.X
-# edit conflict files
-git add <resolved-files>
+# edit conflicting files
+git add <files>
 git commit -m "fix: resolve conflicts for vX.X.X sync"
-make sync-validate   # re-validate after resolution
+make sync-validate
 make sync-merge
 ```
 
 ---
 
-## If CI is down
-
-Manual sync without the workflow:
+## Manual sync (no make)
 
 ```bash
 git remote add upstream https://github.com/anomalyco/opencode.git  # if not present
@@ -141,7 +128,7 @@ git merge upstream/vX.X.X -X ours -m "chore: sync upstream vX.X.X"
 make sync-validate
 git push origin sync/upstream-vX.X.X
 gh pr create --base gdpr/main --head sync/upstream-vX.X.X \
-  --title "chore: sync upstream vX.X.X" \
+  --title "sync: upstream vX.X.X" \
   --body "Manual sync from anomalyco/opencode vX.X.X"
 make sync-merge
 ```
