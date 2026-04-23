@@ -4,7 +4,7 @@
 .PHONY: all install clean build test typecheck lint audit-test help
 .PHONY: test-unit test-integration test-coverage test-watch
 .PHONY: git-check git-sync dev publish
-.PHONY: test-gdpr verify-gdpr gdpr-report
+.PHONY: test-gdpr verify-gdpr gdpr-report validate-gdpr
 .PHONY: build-gdpr build-gdpr-single
 .DEFAULT_GOAL := help
 
@@ -47,6 +47,7 @@ help:
 	@echo "GDPR Compliance:"
 	@echo "  test-gdpr       Run GDPR compliance test suite"
 	@echo "  verify-gdpr     Verify GDPR compliance (tests + code checks)"
+	@echo "  validate-gdpr   Build GDPR binary and run real audit session (local smoke test)"
 	@echo "  gdpr-report     Generate GDPR compliance report"
 	@echo ""
 	@echo "Git Operations:"
@@ -265,6 +266,29 @@ verify-gdpr: test-gdpr
 	@echo "  ✓ Config override protection active"
 	@echo "  ✓ All GDPR tests passed"
 	@echo ""
+
+## validate-gdpr: Build GDPR binary and run a real audit session for manual inspection
+validate-gdpr: build-gdpr-single
+	@echo "$(GREEN)Running GDPR audit validation session...$(NC)"
+	@echo "$(YELLOW)This runs a real LLM session — requires GitHub Copilot authentication$(NC)"
+	@echo ""
+	@BINARY=$$(find packages/opencode/dist -name "opencode*-gdpr" -type f -perm +111 2>/dev/null | head -1); \
+	if [ -z "$$BINARY" ]; then \
+		echo "$(RED)ERROR: GDPR binary not found. Run 'make build-gdpr-single' first.$(NC)"; \
+		exit 1; \
+	fi; \
+	echo "Using binary: $$BINARY"; \
+	echo ""; \
+	$$BINARY --audit run \
+		"Use the available tools and web search to give me a one-sentence summary of what OpenCode is. Keep it brief."; \
+	echo ""; \
+	echo "$(GREEN)Session complete.$(NC)"; \
+	echo ""; \
+	echo "Audit log location:"; \
+	find ~/.local/share/opencode ~/.config/opencode /tmp -name "audit*.jsonl" 2>/dev/null | head -3 || echo "  (check opencode default data directory)"; \
+	echo ""; \
+	echo "Inspect with:"; \
+	echo "  cat <audit-log-path> | jq ."
 
 ## gdpr-report: Generate GDPR compliance report
 gdpr-report:
