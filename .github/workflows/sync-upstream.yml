@@ -9,11 +9,6 @@ on:
         description: "Upstream tag to sync (e.g. v1.3.0). Leave empty for latest."
         required: false
         type: string
-  push:
-    branches:
-      - "gdpr/main"
-    paths:
-      - ".github/workflows/sync-upstream.yml"
 
 permissions:
   contents: write
