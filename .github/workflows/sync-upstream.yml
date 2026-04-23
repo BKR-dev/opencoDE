@@ -41,9 +41,10 @@ jobs:
         id: upstream
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          INPUT_TAG: ${{ github.event.inputs.tag }}
         run: |
-          if [ -n "${{ github.event.inputs.tag }}" ]; then
-            TAG="${{ github.event.inputs.tag }}"
+          if [ -n "$INPUT_TAG" ]; then
+            TAG="$INPUT_TAG"
             echo "Using manually specified tag: $TAG"
           else
             TAG=$(gh api repos/anomalyco/opencode/releases/latest --jq '.tag_name')
@@ -73,8 +74,9 @@ jobs:
       - name: Add upstream remote and fetch tag
         if: steps.check.outputs.needed == 'true'
         run: |
+          TAG="${{ steps.upstream.outputs.tag }}"
           git remote add upstream https://github.com/anomalyco/opencode.git
-          git fetch upstream "refs/tags/${{ steps.upstream.outputs.tag }}:refs/tags/${{ steps.upstream.outputs.tag }}"
+          git fetch upstream "refs/tags/$TAG:refs/tags/$TAG"
 
       - name: Create sync branch
         if: steps.check.outputs.needed == 'true'
@@ -91,10 +93,8 @@ jobs:
         run: |
           TAG="${{ steps.upstream.outputs.tag }}"
           if git merge "refs/tags/$TAG" -X ours --no-edit --allow-unrelated-histories; then
-            echo "Clean merge — no conflicts"
             echo "conflicts=false" >> $GITHUB_OUTPUT
           else
-            echo "Conflicts detected — committing with markers"
             git add -A
             git commit -m "sync: merge upstream $TAG (GDPR-first, conflicts present)"
             echo "conflicts=true" >> $GITHUB_OUTPUT
@@ -104,7 +104,7 @@ jobs:
         if: steps.check.outputs.needed == 'true'
         run: git push -u origin "${{ steps.branch.outputs.name }}"
 
-      - name: Get list of files changed upstream
+      - name: Get files changed upstream
         if: steps.check.outputs.needed == 'true'
         id: changed
         run: |
@@ -119,14 +119,15 @@ jobs:
         if: steps.check.outputs.needed == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.upstream.outputs.tag }}
+          BRANCH: ${{ steps.branch.outputs.name }}
+          CONFLICTS: ${{ steps.merge.outputs.conflicts }}
+          CHANGED_FILES: ${{ steps.changed.outputs.files }}
         run: |
-          TAG="${{ steps.upstream.outputs.tag }}"
-          BRANCH="${{ steps.branch.outputs.name }}"
-          CONFLICTS="${{ steps.merge.outputs.conflicts }}"
           if [ "$CONFLICTS" = "true" ]; then
-            CONFLICT_NOTE="⚠️ **Conflicts detected.** Conflict markers are present in the branch. Resolve them before merging."
+            CONFLICT_NOTE="**Conflicts detected.** Conflict markers are present. Resolve before merging."
           else
-            CONFLICT_NOTE="✅ Clean merge — no conflicts."
+            CONFLICT_NOTE="Clean merge — no conflicts."
           fi
           gh pr create \
             --base gdpr/main \
@@ -141,10 +142,10 @@ $CONFLICT_NOTE
 ### Files changed upstream
 
 \`\`\`
-${{ steps.changed.outputs.files }}
+$CHANGED_FILES
 \`\`\`
 
-### GDPR-critical files to review manually
+### GDPR-critical files to review
 
 - \`packages/opencode/src/gdpr/build-constants.ts\`
 - \`packages/opencode/src/net/egress-policy.ts\`
@@ -152,25 +153,20 @@ ${{ steps.changed.outputs.files }}
 - \`packages/opencode/src/audit/gdpr.ts\`
 - \`packages/opencode/src/audit/network.ts\`
 
-### To validate locally
+### Validate locally
 
 \`\`\`bash
-git fetch origin
-git checkout $BRANCH
+git fetch origin && git checkout $BRANCH
 make validate-gdpr
 \`\`\`
 
 After validation, update \`.github/upstream-version\` to \`$TAG\` and merge."
 
-      - name: Job summary
+      - name: Summary
         run: |
-          NEEDED="${{ steps.check.outputs.needed }}"
-          CURRENT="${{ steps.current.outputs.tag }}"
-          UPSTREAM="${{ steps.upstream.outputs.tag }}"
-          if [ "$NEEDED" = "true" ]; then
-            echo "## Sync PR opened for $UPSTREAM" >> $GITHUB_STEP_SUMMARY
-            echo "Branch: sync/upstream-$UPSTREAM" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ steps.check.outputs.needed }}" = "true" ]; then
+            echo "## Sync PR opened for ${{ steps.upstream.outputs.tag }}" >> $GITHUB_STEP_SUMMARY
           else
-            echo "## Up to date ($CURRENT)" >> $GITHUB_STEP_SUMMARY
+            echo "## Up to date (${{ steps.current.outputs.tag }})" >> $GITHUB_STEP_SUMMARY
             echo "No sync needed." >> $GITHUB_STEP_SUMMARY
           fi
