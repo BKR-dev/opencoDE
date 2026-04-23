@@ -41,6 +41,7 @@ import { TaskTool } from "@/tool/task"
 import { Tool } from "@/tool/tool"
 import { PermissionNext } from "@/permission/next"
 import { SessionStatus } from "./status"
+import { Share } from "../share/share"
 import { LLM } from "./llm"
 import { iife } from "@/util/iife"
 import { Shell } from "@/shell/shell"
@@ -252,6 +253,7 @@ export namespace SessionPrompt {
     }
     delete s[sessionID]
     SessionStatus.set(sessionID, { type: "idle" })
+    Share.finalise(sessionID)
     return
   }
 

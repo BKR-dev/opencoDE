@@ -3,8 +3,8 @@ import { Installation } from "../installation"
 import { Session } from "../session"
 import { MessageV2 } from "../session/message-v2"
 import { Log } from "../util/log"
-import { logSessionShare, logDataTransfer } from "../audit/gdpr"
-import { isGitHubOnlyMode, isSessionSharingDisabled } from "../gdpr/build-constants"
+import { logSessionStart, logSessionEnd, logDataTransfer } from "../audit/gdpr"
+import { isSessionSharingDisabled } from "../gdpr/build-constants"
 
 export namespace Share {
   const log = Log.create({ service: "share" })
@@ -12,18 +12,32 @@ export namespace Share {
   let queue: Promise<void> = Promise.resolve()
   const pending = new Map<string, any>()
 
+  // Per-session counters so we can emit a single lifecycle summary instead of
+  // one audit line per streamed token.
+  const sessionCounters = new Map<
+    string,
+    { messages: number; parts: number; cloudSyncBlocked: { info: number; message: number; part: number }; startMs: number }
+  >()
+
+  function getCounter(sessionID: string) {
+    const existing = sessionCounters.get(sessionID)
+    if (existing) return existing
+    const counter = { messages: 0, parts: 0, cloudSyncBlocked: { info: 0, message: 0, part: 0 }, startMs: Date.now() }
+    sessionCounters.set(sessionID, counter)
+    return counter
+  }
+
   export async function sync(key: string, content: any) {
     if (disabled) {
-      // GDPR Audit: Log blocked sharing attempt
       const [root, ...splits] = key.split("/")
       if (root === "session") {
         const [sub, sessionID] = splits
-        if (sub !== "share") {
-          logSessionShare({
-            sessionID: sessionID ?? "unknown",
-            action: "blocked",
-            reason: "session_sharing_disabled",
-          })
+        if (sub !== "share" && sessionID) {
+          // Track by data type — emitted as a typed breakdown in gdpr.session.end
+          const blocked = getCounter(sessionID).cloudSyncBlocked
+          if (sub === "info") blocked.info++
+          else if (sub === "message") blocked.message++
+          else if (sub === "part") blocked.part++
         }
       }
       return
@@ -36,7 +50,6 @@ export namespace Share {
     if (!share) return
     const { secret } = share
 
-    // GDPR Audit: Log data transfer to external API
     logDataTransfer({
       sessionID,
       recipient: "opencode_api",
@@ -75,15 +88,32 @@ export namespace Share {
 
   export function init() {
     Bus.subscribe(Session.Event.Updated, async (evt) => {
-      await sync("session/info/" + evt.properties.info.id, evt.properties.info)
+      const sessionID = evt.properties.info.id
+      const counter = getCounter(sessionID)
+      counter.messages++
+
+      // Emit session.start on first message update (session just became active)
+      if (counter.messages === 1) {
+        logSessionStart({ sessionID })
+      }
+
+      await sync("session/info/" + sessionID, evt.properties.info)
     })
+
     Bus.subscribe(MessageV2.Event.Updated, async (evt) => {
-      await sync("session/message/" + evt.properties.info.sessionID + "/" + evt.properties.info.id, evt.properties.info)
+      await sync(
+        "session/message/" + evt.properties.info.sessionID + "/" + evt.properties.info.id,
+        evt.properties.info,
+      )
     })
+
     Bus.subscribe(MessageV2.Event.PartUpdated, async (evt) => {
+      const sessionID = evt.properties.part.sessionID
+      getCounter(sessionID).parts++
+
       await sync(
         "session/part/" +
-          evt.properties.part.sessionID +
+          sessionID +
           "/" +
           evt.properties.part.messageID +
           "/" +
@@ -91,6 +121,22 @@ export namespace Share {
         evt.properties.part,
       )
     })
+  }
+
+  /**
+   * Call when a session finishes to emit a single summary audit event.
+   */
+  export function finalise(sessionID: string) {
+    const counter = sessionCounters.get(sessionID)
+    if (!counter) return
+    logSessionEnd({
+      sessionID,
+      messageCount: counter.messages,
+      partCount: counter.parts,
+      cloudSyncBlocked: counter.cloudSyncBlocked,
+      durationMs: Date.now() - counter.startMs,
+    })
+    sessionCounters.delete(sessionID)
   }
 
   export const URL =
@@ -105,12 +151,7 @@ export namespace Share {
   const disabled = isSessionSharingDisabled()
 
   export async function create(sessionID: string) {
-    if (disabled) {
-      logSessionShare({ sessionID, action: "blocked", reason: "session_sharing_disabled" })
-      return { url: "", secret: "" }
-    }
-
-    logSessionShare({ sessionID, action: "create" })
+    if (disabled) return { url: "", secret: "" }
 
     return fetch(`${URL}/share_create`, {
       method: "POST",
@@ -121,12 +162,7 @@ export namespace Share {
   }
 
   export async function remove(sessionID: string, secret: string) {
-    if (disabled) {
-      logSessionShare({ sessionID, action: "blocked", reason: "session_sharing_disabled" })
-      return {}
-    }
-
-    logSessionShare({ sessionID, action: "delete" })
+    if (disabled) return {}
 
     return fetch(`${URL}/share_delete`, {
       method: "POST",

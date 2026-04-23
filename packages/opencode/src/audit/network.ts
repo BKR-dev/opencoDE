@@ -8,7 +8,6 @@
  */
 
 import { auditRecordNoWait } from "./index"
-import { isGitHubOnlyMode, isExternalAPIBlocked } from "../gdpr/build-constants"
 
 let auditEnabled = false
 
@@ -66,8 +65,6 @@ export function logNetworkRequest(params: {
     hostname: urlObj.hostname,
     pathname: urlObj.pathname,
     time: new Date().toISOString(),
-    gdprMode: isGitHubOnlyMode(),
-    egressBlocked: isExternalAPIBlocked(),
   })
 
   // Also log to console in audit mode
@@ -100,7 +97,6 @@ export function logProviderRequest(params: {
   auditRecordNoWait("audit.provider.request", {
     ...params,
     time: new Date().toISOString(),
-    gdprMode: isGitHubOnlyMode(),
   })
 
   const icon = params.allowed ? (params.blocked ? "🚫" : "🤖") : "❌"
@@ -175,7 +171,5 @@ export function logAuditSummary(summary: {
   auditRecordNoWait("audit.summary", {
     ...summary,
     time: new Date().toISOString(),
-    gdprMode: isGitHubOnlyMode(),
-    egressBlocked: isExternalAPIBlocked(),
   })
 }

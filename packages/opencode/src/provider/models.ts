@@ -7,6 +7,35 @@ import { Installation } from "../installation"
 import { Flag } from "../flag/flag"
 import { logModelMetadataFetch } from "../audit/gdpr"
 import { isGitHubOnlyMode } from "../gdpr/build-constants"
+import { Auth } from "../auth"
+
+// Shape of a single item returned by https://api.githubcopilot.com/models
+interface GitHubModelItem {
+  id: string
+  name?: string
+  friendly_name?: string
+  model_picker_enabled?: boolean
+  capabilities?: {
+    supports_tool_calls?: boolean
+    supports_vision?: boolean
+    supports_reasoning?: boolean
+    max_input_tokens?: number
+    max_output_tokens?: number
+    // Copilot API uses nested supports/limits objects
+    supports?: {
+      tool_calls?: boolean
+      vision?: boolean
+      streaming?: boolean
+      reasoning_effort?: string[]
+    }
+    limits?: {
+      max_context_window_tokens?: number
+      max_output_tokens?: number
+      max_prompt_tokens?: number
+      vision?: object
+    }
+  }
+}
 
 export namespace ModelsDev {
   const log = Log.create({ service: "models.dev" })
@@ -78,86 +107,78 @@ export namespace ModelsDev {
 
   export type Provider = z.infer<typeof Provider>
 
-  async function getRawModels() {
-    // Try cached file first
-    const file = Bun.file(filepath)
-    let result = await file.json().catch(() => {})
-    if (result) return result
+  // Fetch the live model list directly from the GitHub Copilot API.
+  // This is the only correct source of truth for available models in GDPR mode —
+  // the macro-embedded data is fetched from models.dev at build time and only
+  // contains whatever models.dev knew about at that moment (often just gpt-4o-mini).
+  async function fetchGitHubCopilotModels(): Promise<Record<string, Provider>> {
+    const auth = await Auth.get("github-copilot")
+    const token = auth?.type === "oauth" ? auth.refresh : undefined
+    const headers: Record<string, string> = {
+      "User-Agent": Installation.USER_AGENT,
+      Accept: "application/json",
+    }
+    if (token) headers["Authorization"] = `Bearer ${token}`
 
-    // If models-macro exports a function, call it to get embedded data
-    if (typeof data === "function") {
-      const json = await data()
-      try {
-        return JSON.parse(json)
-      } catch (e) {
-        // fallthrough
-      }
+    const resp = await fetch("https://api.githubcopilot.com/models", { headers }).catch(() => undefined)
+    if (!resp?.ok) {
+      log.warn("Failed to fetch GitHub Copilot models from API", { status: resp?.status })
+      return {}
     }
 
-    // If models-macro exports a string, parse it
-    if (typeof data === "string") {
-      try {
-        return JSON.parse(data)
-      } catch (e) {
-        // fallthrough
-      }
-    }
-
-    // Avoid network fetch in GitHub-only mode: return a minimal github-copilot manifest
-    if (isGitHubOnlyMode()) {
-      return {
-        "github-copilot": {
-          id: "github-copilot",
-          name: "GitHub Copilot",
-          env: [],
-          npm: "@ai-sdk/github-copilot",
-          api: "https://api.github.com",
-          models: {
-            "gpt-5-mini": {
-              id: "gpt-5-mini",
-              name: "gpt-5-mini",
-              release_date: "2026-01-01",
-              attachment: false,
-              reasoning: true,
-              temperature: true,
-              tool_call: false,
-              interleaved: false,
-              cost: { input: 0, output: 0 },
-              limit: { context: 1000000, input: 10000, output: 10000 },
-              modalities: { input: ["text"], output: ["text"] },
-              options: {},
-            },
-          },
+    const body = (await resp.json()) as { data: GitHubModelItem[] }
+    const items = body.data ?? []
+    const models: Record<string, ModelsDev.Model> = {}
+    for (const item of items) {
+      const cap = item.capabilities ?? {}
+      const supports = cap.supports ?? {}
+      const limits = cap.limits ?? {}
+      const hasVision = !!(supports.vision || cap.supports_vision)
+      const hasToolCall = !!(supports.tool_calls || cap.supports_tool_calls)
+      const hasReasoning = Array.isArray(supports.reasoning_effort) && supports.reasoning_effort.length > 0
+      const contextWindow = limits.max_context_window_tokens ?? 128000
+      const outputTokens = limits.max_output_tokens ?? 4096
+      models[item.id] = {
+        id: item.id,
+        name: item.name ?? item.id,
+        release_date: "2026-01-01",
+        attachment: hasVision,
+        reasoning: hasReasoning,
+        temperature: true,
+        tool_call: hasToolCall,
+        cost: { input: 0, output: 0 },
+        limit: {
+          context: contextWindow,
+          input: limits.max_prompt_tokens,
+          output: outputTokens,
         },
+        modalities: {
+          input: hasVision ? ["text", "image"] : ["text"],
+          output: ["text"],
+        },
+        options: {},
       }
     }
 
-    // Fallback to fetching from models.dev
-    const url = Global.Path.modelsDevUrl
-    const json = await fetch(`${url}/api.json`).then((x) => x.text())
-    return JSON.parse(json)
+    return {
+      "github-copilot": {
+        id: "github-copilot",
+        name: "GitHub Copilot",
+        env: [],
+        npm: "@ai-sdk/github-copilot",
+        api: "https://api.githubcopilot.com",
+        models,
+      },
+    }
   }
 
-  export async function get() {
-    // When OPENCODE_ONLY_GITHUB is enabled, filter models to only include github-copilot
+  export async function get(): Promise<Record<string, Provider>> {
+    // In GitHub-only (GDPR) mode: bypass the macro/cache entirely and fetch
+    // live from https://api.github.com/models so the full model catalogue is shown.
     if (isGitHubOnlyMode()) {
-      const data = await getRawModels()
-      const filtered: { [k: string]: any } = {}
-      for (const [k, v] of Object.entries(data)) {
-        if (k.startsWith("github-copilot")) filtered[k] = v
-      }
-      return filtered
+      return fetchGitHubCopilotModels()
     }
 
-    // When OPENCODE_ONLY_GITHUB is enabled, filter models to only include github-copilot
-    if (isGitHubOnlyMode()) {
-      const data = await getRawModels()
-      const filtered: { [k: string]: any } = {}
-      for (const [k, v] of Object.entries(data)) {
-        if (k.startsWith("github-copilot")) filtered[k] = v
-      }
-      return filtered
-    }
     refresh()
     const file = Bun.file(filepath)
     let result = await file.json().catch(() => {})
@@ -173,38 +194,13 @@ export namespace ModelsDev {
       result = JSON.parse(json)
     }
 
-    // Only expose the allowed providers (non-destructive runtime filter)
-    // Make filter opt-in via OPENCODE_ONLY_GITHUB to avoid breaking tests and local tooling
-    if (isGitHubOnlyMode()) {
-      const allowed = new Set(["github-copilot"])
-      const providers = (result as Record<string, Provider>) || {}
-      const filtered = Object.fromEntries(
-        Object.entries(providers).filter(
-          ([key, val]) => allowed.has(key) || (val && typeof val === "object" && allowed.has((val as any).id)),
-        ),
-      ) as Record<string, Provider>
-
-      // Ensure any provider models that reference external npm packages are also filtered
-      for (const [k, v] of Object.entries(filtered)) {
-        if (v && v.models) {
-          for (const [mid, model] of Object.entries(v.models)) {
-            if (model.provider && model.provider.npm && !model.provider.npm.includes("github-copilot")) {
-              delete (v.models as any)[mid]
-            }
-          }
-        }
-      }
-
-      return filtered
-    }
-
     return result as Record<string, Provider>
   }
 
   export async function refresh() {
-    // GDPR COMPLIANCE: Block models.dev fetch in GitHub-only mode
-    // models.dev sends metadata about installed providers to external service
-    // In GDPR mode, only GitHub Copilot is used, so external model discovery is unnecessary
+    // GDPR COMPLIANCE: Block models.dev fetch in GitHub-only mode.
+    // models.dev sends metadata about installed providers to an external service.
+    // In GDPR mode we fetch directly from the GitHub API instead (see get()).
     if (isGitHubOnlyMode()) {
       log.info("models.dev fetch blocked in GitHub-only (GDPR) mode")
       logModelMetadataFetch({
@@ -217,19 +213,13 @@ export namespace ModelsDev {
 
     if (Flag.OPENCODE_DISABLE_MODELS_FETCH) return
     const file = Bun.file(filepath)
-    log.info("refreshing", {
-      file,
-    })
+    log.info("refreshing", { file })
     const url = Global.Path.modelsDevUrl
     const result = await fetch(`${url}/api.json`, {
-      headers: {
-        "User-Agent": Installation.USER_AGENT,
-      },
+      headers: { "User-Agent": Installation.USER_AGENT },
       signal: AbortSignal.timeout(10 * 1000),
     }).catch((e) => {
-      log.error("Failed to fetch models.dev", {
-        error: e,
-      })
+      log.error("Failed to fetch models.dev", { error: e })
     })
     if (result && result.ok) await Bun.write(file, await result.text())
   }

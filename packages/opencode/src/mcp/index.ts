@@ -132,7 +132,7 @@ export namespace MCP {
   }
 
   // Convert MCP tool definition to AI SDK Tool type
-  async function convertMcpTool(mcpTool: MCPToolDef, client: MCPClient, timeout?: number): Promise<Tool> {
+  async function convertMcpTool(mcpTool: MCPToolDef, client: MCPClient, serverName: string, timeout?: number): Promise<Tool> {
     const inputSchema = mcpTool.inputSchema
 
     // Spread first, then override type to ensure it's always "object"
@@ -147,25 +147,42 @@ export namespace MCP {
       description: mcpTool.description ?? "",
       inputSchema: jsonSchema(schema),
       execute: async (args: unknown) => {
-        // Audit MCP tool call
+        const startMs = Date.now()
+        let outcome: "success" | "error" = "success"
+        let errorMessage: string | undefined
         try {
-          // @ts-ignore - audit module provides no types here
-          const { auditRecordNoWait } = await import("../audit")
-          auditRecordNoWait("mcp.tool.call", { client: clientNameSafe(client), tool: mcpTool.name, args: args, time: new Date().toISOString() })
+          const result = await client.callTool(
+            {
+              name: mcpTool.name,
+              arguments: args as Record<string, unknown>,
+            },
+            CallToolResultSchema,
+            {
+              resetTimeoutOnProgress: true,
+              timeout,
+            },
+          )
+          return result
         } catch (e) {
-          // ignore audit failures
+          outcome = "error"
+          errorMessage = e instanceof Error ? e.message : String(e)
+          throw e
+        } finally {
+          try {
+            // @ts-ignore - audit module provides no types here
+            const { auditRecordNoWait } = await import("../audit")
+            auditRecordNoWait("mcp.tool.call", {
+              server: serverName,
+              tool: mcpTool.name,
+              outcome,
+              durationMs: Date.now() - startMs,
+              ...(errorMessage ? { error: errorMessage } : {}),
+              time: new Date().toISOString(),
+            })
+          } catch {
+            // ignore audit failures
+          }
         }
-        return client.callTool(
-          {
-            name: mcpTool.name,
-            arguments: args as Record<string, unknown>,
-          },
-          CallToolResultSchema,
-          {
-            resetTimeoutOnProgress: true,
-            timeout,
-          },
-        )
       },
     })
   }
@@ -619,7 +636,7 @@ export namespace MCP {
       for (const mcpTool of toolsResult.tools) {
         const sanitizedClientName = clientName.replace(/[^a-zA-Z0-9_-]/g, "_")
         const sanitizedToolName = mcpTool.name.replace(/[^a-zA-Z0-9_-]/g, "_")
-        result[sanitizedClientName + "_" + sanitizedToolName] = await convertMcpTool(mcpTool, client, timeout)
+        result[sanitizedClientName + "_" + sanitizedToolName] = await convertMcpTool(mcpTool, client, clientName, timeout)
       }
     }
     return result
