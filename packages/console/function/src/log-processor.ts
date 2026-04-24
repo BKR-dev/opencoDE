@@ -13,12 +13,15 @@ export default {
         url.pathname !== "/zen/v1/chat/completions" &&
         url.pathname !== "/zen/v1/messages" &&
         url.pathname !== "/zen/v1/responses" &&
-        !url.pathname.startsWith("/zen/v1/models/")
+        !url.pathname.startsWith("/zen/v1/models/") &&
+        url.pathname !== "/zen/go/v1/chat/completions" &&
+        url.pathname !== "/zen/go/v1/messages" &&
+        url.pathname !== "/zen/go/v1/responses" &&
+        !url.pathname.startsWith("/zen/go/v1/models/")
       )
         return
 
-      let metrics = {
-        event_type: "completions",
+      let data = {
         "cf.continent": event.event.request.cf?.continent,
         "cf.country": event.event.request.cf?.country,
         "cf.city": event.event.request.cf?.city,
@@ -31,13 +34,20 @@ export default {
         status: event.event.response?.status ?? 0,
         ip: event.event.request.headers["x-real-ip"],
       }
+      const time = new Date(event.eventTimestamp ?? Date.now()).toISOString()
+      const events = []
       for (const log of event.logs) {
         for (const message of log.message) {
           if (!message.startsWith("_metric:")) continue
-          metrics = { ...metrics, ...JSON.parse(message.slice(8)) }
+          const json = JSON.parse(message.slice(8))
+          data = { ...data, ...json }
+          if ("llm.error.code" in json) {
+            events.push({ time, data: { ...data, event_type: "llm.error" } })
+          }
         }
       }
-      console.log(JSON.stringify(metrics, null, 2))
+      events.push({ time, data: { ...data, event_type: "completions" } })
+      console.log(JSON.stringify(data, null, 2))
 
       // GDPR COMPLIANCE: Honeycomb analytics disabled
       // Reason: Sends geolocation (latitude, longitude, city, region) and IP addresses

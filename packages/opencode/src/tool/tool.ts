@@ -1,48 +1,35 @@
-import z from "zod"
+import { Effect, Schema } from "effect"
 import type { MessageV2 } from "../session/message-v2"
-import type { Agent } from "../agent/agent"
-import type { PermissionNext } from "../permission/next"
-import { Truncate } from "./truncation"
+import type { Permission } from "../permission"
+import type { SessionID, MessageID } from "../session/schema"
+import * as Truncate from "./truncate"
+import { Agent } from "@/agent/agent"
 
-export namespace Tool {
-  interface Metadata {
-    [key: string]: any
-  }
+interface Metadata {
+  [key: string]: any
+}
 
-  export interface InitContext {
-    agent?: Agent.Info
-  }
+// TODO: remove this hack
+export type DynamicDescription = (agent: Agent.Info) => Effect.Effect<string>
 
-  export type Context<M extends Metadata = Metadata> = {
-    sessionID: string
-    messageID: string
-    agent: string
-    abort: AbortSignal
-    callID?: string
-    extra?: { [key: string]: any }
-    metadata(input: { title?: string; metadata?: M }): void
-    ask(input: Omit<PermissionNext.Request, "id" | "sessionID" | "tool">): Promise<void>
-  }
-  export interface Info<Parameters extends z.ZodType = z.ZodType, M extends Metadata = Metadata> {
-    id: string
-    init: (ctx?: InitContext) => Promise<{
-      description: string
-      parameters: Parameters
-      execute(
-        args: z.infer<Parameters>,
-        ctx: Context,
-      ): Promise<{
-        title: string
-        metadata: M
-        output: string
-        attachments?: MessageV2.FilePart[]
-      }>
-      formatValidationError?(error: z.ZodError): string
-    }>
-  }
+export type Context<M extends Metadata = Metadata> = {
+  sessionID: SessionID
+  messageID: MessageID
+  agent: string
+  abort: AbortSignal
+  callID?: string
+  extra?: { [key: string]: unknown }
+  messages: MessageV2.WithParts[]
+  metadata(input: { title?: string; metadata?: M }): Effect.Effect<void>
+  ask(input: Omit<Permission.Request, "id" | "sessionID" | "tool">): Effect.Effect<void>
+}
 
-  export type InferParameters<T extends Info> = T extends Info<infer P> ? z.infer<P> : never
-  export type InferMetadata<T extends Info> = T extends Info<any, infer M> ? M : never
+export interface ExecuteResult<M extends Metadata = Metadata> {
+  title: string
+  metadata: M
+  output: string
+  attachments?: Omit<MessageV2.FilePart, "id" | "sessionID" | "messageID">[]
+}
 
   export function define<Parameters extends z.ZodType, Result extends Metadata>(
     id: string,
@@ -83,7 +70,8 @@ export namespace Tool {
           if (result.metadata.truncated !== undefined) {
             return result
           }
-          const truncated = await Truncate.output(result.output, {}, initCtx?.agent)
+          const agent = yield* agents.get(ctx.agent)
+          const truncated = yield* truncate.output(result.output, {}, agent)
           return {
             ...result,
             output: truncated.content,
@@ -93,9 +81,40 @@ export namespace Tool {
               ...(truncated.truncated && { outputPath: truncated.outputPath }),
             },
           }
-        }
-        return toolInfo
-      },
+        }).pipe(Effect.orDie, Effect.withSpan("Tool.execute", { attributes: attrs }))
+      }
+      return toolInfo
+    })
+}
+
+export function define<
+  Parameters extends Schema.Decoder<unknown>,
+  Result extends Metadata,
+  R,
+  ID extends string = string,
+>(
+  id: ID,
+  init: Effect.Effect<Init<Parameters, Result>, never, R>,
+): Effect.Effect<Info<Parameters, Result>, never, R | Truncate.Service | Agent.Service> & { id: ID } {
+  return Object.assign(
+    Effect.gen(function* () {
+      const resolved = yield* init
+      const truncate = yield* Truncate.Service
+      const agents = yield* Agent.Service
+      return { id, init: wrap(id, resolved, truncate, agents) }
+    }),
+    { id },
+  )
+}
+
+export function init<P extends Schema.Decoder<unknown>, M extends Metadata>(
+  info: Info<P, M>,
+): Effect.Effect<Def<P, M>> {
+  return Effect.gen(function* () {
+    const init = yield* info.init()
+    return {
+      ...init,
+      id: info.id,
     }
-  }
+  })
 }

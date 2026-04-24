@@ -1,10 +1,10 @@
 #!/usr/bin/env bun
 
-import solidPlugin from "../node_modules/@opentui/solid/scripts/solid-plugin"
-import path from "path"
-import fs from "fs"
 import { $ } from "bun"
+import fs from "fs"
+import path from "path"
 import { fileURLToPath } from "url"
+import { createSolidTransformPlugin } from "@opentui/solid/bun-plugin"
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -12,7 +12,8 @@ const dir = path.resolve(__dirname, "..")
 
 process.chdir(dir)
 
-import pkg from "../package.json"
+await import("./generate.ts")
+
 import { Script } from "@opencode-ai/script"
 import { getBuildConfig, toBuildDefines } from "./gdpr-config"
 
@@ -68,6 +69,10 @@ const allTargets: {
     os: "darwin",
     arch: "x64",
     avx2: false,
+  },
+  {
+    os: "win32",
+    arch: "arm64",
   },
   {
     os: "win32",
@@ -136,7 +141,9 @@ for (const item of targets) {
   console.log(`building ${name}`)
   await $`mkdir -p dist/${name}/bin`
 
-  const parserWorker = fs.realpathSync(path.resolve(dir, "./node_modules/@opentui/core/parser.worker.js"))
+  const localPath = path.resolve(dir, "node_modules/@opentui/core/parser.worker.js")
+  const rootPath = path.resolve(dir, "../../node_modules/@opentui/core/parser.worker.js")
+  const parserWorker = fs.realpathSync(fs.existsSync(localPath) ? localPath : rootPath)
   const workerPath = "./src/cli/cmd/tui/worker.ts"
 
   // Use platform-specific bunfs root path based on target OS
@@ -146,12 +153,14 @@ for (const item of targets) {
   await Bun.build({
     conditions: ["browser"],
     tsconfig: "./tsconfig.json",
-    plugins: [solidPlugin],
-    sourcemap: "external",
+    plugins: [plugin],
+    external: ["node-gyp"],
+    format: "esm",
+    minify: true,
+    splitting: true,
     compile: {
       autoloadBunfig: false,
       autoloadDotenv: false,
-      //@ts-ignore (bun types aren't up to date)
       autoloadTsconfig: true,
       autoloadPackageJson: true,
       target: targetName.replace(pkg.name, "bun") as any,
@@ -159,9 +168,11 @@ for (const item of targets) {
       execArgv: [`--user-agent=opencode/${Script.version}`, "--use-system-ca", "--"],
       windows: {},
     },
-    entrypoints: ["./src/index.ts", parserWorker, workerPath],
+    files: embeddedFileMap ? { "opencode-web-ui.gen.ts": embeddedFileMap } : {},
+    entrypoints: ["./src/index.ts", parserWorker, workerPath, ...(embeddedFileMap ? ["opencode-web-ui.gen.ts"] : [])],
     define: {
       OPENCODE_VERSION: `'${Script.version}'`,
+      OPENCODE_MIGRATIONS: JSON.stringify(migrations),
       OTUI_TREE_SITTER_WORKER_PATH: bunfsRoot + workerRelativePath,
       OPENCODE_WORKER_PATH: workerPath,
       OPENCODE_CHANNEL: `'${Script.channel}'`,
@@ -170,6 +181,19 @@ for (const item of targets) {
       ...toBuildDefines(gdprConfig),
     },
   })
+
+  // Smoke test: only run if binary is for current platform
+  if (item.os === process.platform && item.arch === process.arch && !item.abi) {
+    const binaryPath = `dist/${name}/bin/opencode`
+    console.log(`Running smoke test: ${binaryPath} --version`)
+    try {
+      const versionOutput = await $`${binaryPath} --version`.text()
+      console.log(`Smoke test passed: ${versionOutput.trim()}`)
+    } catch (e) {
+      console.error(`Smoke test failed for ${name}:`, e)
+      process.exit(1)
+    }
+  }
 
   await $`rm -rf ./dist/${name}/bin/tui`
   await Bun.file(`dist/${name}/package.json`).write(
@@ -185,6 +209,17 @@ for (const item of targets) {
     ),
   )
   binaries[name] = Script.version
+}
+
+if (Script.release) {
+  for (const key of Object.keys(binaries)) {
+    if (key.includes("linux")) {
+      await $`tar -czf ../../${key}.tar.gz *`.cwd(`dist/${key}/bin`)
+    } else {
+      await $`zip -r ../../${key}.zip *`.cwd(`dist/${key}/bin`)
+    }
+  }
+  await $`gh release upload v${Script.version} ./dist/*.zip ./dist/*.tar.gz --clobber --repo ${process.env.GH_REPO}`
 }
 
 export { binaries }
