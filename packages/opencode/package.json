@@ -15,7 +15,8 @@
     "build:gdpr-single": "bun run script/build.ts --gdpr --single",
     "dev": "bun run --conditions=browser ./src/index.ts",
     "dev:temporary": "bun run --conditions=browser ./src/temporary.ts",
-    "db": "bun drizzle-kit"
+    "db": "bun drizzle-kit",
+    "fix-node-pty": "bun run script/fix-node-pty.ts"
   },
   "bin": {
     "opencode": "./bin/opencode"
@@ -80,7 +81,7 @@
     "@agentclientprotocol/sdk": "0.12.0",
     "@ai-sdk/openai-compatible": "1.0.30",
     "@ai-sdk/provider": "3.0.8",
-    "@ai-sdk/provider-utils": "0.0.0-01d6317c-20260129172110",
+    "@ai-sdk/provider-utils": "4.0.23",
     "@clack/prompts": "1.0.0-alpha.1",
     "@hono/standard-validator": "0.1.5",
     "@hono/zod-validator": "catalog:",
@@ -94,7 +95,6 @@
     "@opencode-ai/plugin": "workspace:*",
     "@opencode-ai/script": "workspace:*",
     "@opencode-ai/sdk": "workspace:*",
-    "@opencode-ai/util": "workspace:*",
     "@opentui/core": "0.1.74",
     "@opentui/solid": "0.1.74",
     "@parcel/watcher": "2.5.1",

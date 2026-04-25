@@ -12,7 +12,7 @@ import { createOpencodeClient } from "@opencode-ai/sdk"
 import { Flag } from "../flag/flag"
 import { CodexAuthPlugin } from "./codex"
 import { Session } from "../session"
-import { NamedError } from "@opencode-ai/util/error"
+import { NamedError } from "@opencode-ai/shared/util/error"
 import { CopilotAuthPlugin } from "./copilot"
 import { isGitHubOnlyMode } from "../gdpr/build-constants"
 
