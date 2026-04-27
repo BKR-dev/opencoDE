@@ -305,24 +305,30 @@ sync-check:
 		echo "$(RED)ERROR: gh CLI not found. Install from https://cli.github.com$(NC)"; \
 		exit 1; \
 	fi
+	@if ! gh auth status >/dev/null 2>&1; then \
+		echo "$(RED)ERROR: gh CLI is not authenticated. Run 'gh auth login'.$(NC)"; \
+		exit 1; \
+	fi
 	@CURRENT=$$(cat .github/upstream-version); \
 	if [ -n "$(TAG)" ]; then \
 		UPSTREAM="$(TAG)"; \
 	else \
 		UPSTREAM=$$(gh api repos/anomalyco/opencode/releases/latest --jq '.tag_name'); \
 	fi; \
+	BRANCH="sync/upstream-$$UPSTREAM"; \
 	echo "Current: $$CURRENT  Upstream: $$UPSTREAM"; \
 	if [ "$$CURRENT" = "$$UPSTREAM" ]; then \
 		echo "$(GREEN)Already up to date with $$UPSTREAM — nothing to do.$(NC)"; \
 		exit 0; \
 	fi; \
 	echo "$(YELLOW)New release detected: $$UPSTREAM$(NC)"; \
-	BRANCH="sync/upstream-$$UPSTREAM"; \
-	git config user.name "GDPR Sync Bot"; \
-	git config user.email "41898282+github-actions[bot]@users.noreply.github.com"; \
 	git remote get-url upstream >/dev/null 2>&1 || git remote add upstream https://github.com/anomalyco/opencode.git; \
 	git fetch upstream "refs/tags/$$UPSTREAM:refs/tags/$$UPSTREAM"; \
-	git checkout gdpr/main; \
+	git fetch origin gdpr/main; \
+	if git show-ref --verify --quiet "refs/heads/$$BRANCH"; then \
+		git branch -D "$$BRANCH"; \
+	fi; \
+	git checkout -B gdpr/main origin/gdpr/main; \
 	git checkout -b "$$BRANCH"; \
 	CONFLICTS=false; \
 	if ! git merge "refs/tags/$$UPSTREAM" -X ours --no-edit --allow-unrelated-histories; then \
@@ -330,31 +336,44 @@ sync-check:
 		git commit -m "sync: merge upstream $$UPSTREAM (conflicts present)"; \
 		CONFLICTS=true; \
 	fi; \
-	git push -u origin "$$BRANCH"; \
-	CHANGED=$$(git diff --name-only "refs/tags/$$CURRENT" "refs/tags/$$UPSTREAM" 2>/dev/null | head -40 || echo ""); \
+	git push -u --force-with-lease origin "$$BRANCH"; \
+	CHANGED=$$(git diff --name-only "refs/tags/$$CURRENT" "refs/tags/$$UPSTREAM" 2>/dev/null | head -40 || true); \
 	NOTE="Clean merge."; \
 	if [ "$$CONFLICTS" = "true" ]; then NOTE="Conflicts present — resolve before merging."; fi; \
+	EXISTING_PR=$$(gh pr list --repo BKR-dev/opencoDE --head "$$BRANCH" --state open --json url --jq '.[0].url'); \
+	if [ -n "$$EXISTING_PR" ]; then \
+		echo "$(GREEN)PR already exists: $$EXISTING_PR$(NC)"; \
+		exit 0; \
+	fi; \
+	PR_BODY=$$(printf '%s\n' \
+		"## Upstream sync: $$UPSTREAM" \
+		"" \
+		"$$NOTE" \
+		"" \
+		"Changed files:" \
+		'```' \
+		"$$CHANGED" \
+		'```' \
+		"" \
+		"GDPR-critical files to review:" \
+		"- src/gdpr/build-constants.ts" \
+		"- src/net/egress-policy.ts" \
+		"- src/provider/provider.ts" \
+		"- src/provider/models.ts" \
+		"- src/audit/gdpr.ts" \
+		"- src/audit/network.ts" \
+		"- src/index.ts" \
+		"- src/tool/webfetch.ts" \
+		"- src/tool/websearch.ts" \
+		"- src/share/share.ts" \
+		"" \
+		"Validate: git checkout $$BRANCH && make sync-validate" \
+		"After validation: update .github/upstream-version to $$UPSTREAM and merge."); \
 	gh pr create \
 		--base gdpr/main \
 		--head "$$BRANCH" \
 		--title "sync: upstream $$UPSTREAM" \
-		--body "## Upstream sync: $$UPSTREAM
-
-$$NOTE
-
-Changed files:
-\`\`\`
-$$CHANGED
-\`\`\`
-
-GDPR-critical files to review:
-- src/gdpr/build-constants.ts
-- src/net/egress-policy.ts
-- src/provider/provider.ts
-- src/audit/gdpr.ts
-
-Validate: git checkout $$BRANCH && make validate-gdpr
-After validation: update .github/upstream-version to $$UPSTREAM and merge."; \
+		--body "$$PR_BODY"; \
 	echo "$(GREEN)PR opened for $$UPSTREAM$(NC)"
 
 ## sync-checkout: Checkout an open sync branch locally (TAG=vX.X.X required)
