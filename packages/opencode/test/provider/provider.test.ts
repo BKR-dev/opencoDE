@@ -165,6 +165,40 @@ test("enabled_providers restricts to only listed providers", async () => {
   })
 })
 
+test("OPENCODE_ONLY_GITHUB restricts providers to GitHub Copilot", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          enabled_providers: ["anthropic"],
+          disabled_providers: ["github-copilot"],
+        }),
+      )
+    },
+  })
+
+  const previous = process.env.OPENCODE_ONLY_GITHUB
+  process.env.OPENCODE_ONLY_GITHUB = "1"
+
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      set("ANTHROPIC_API_KEY", "test-api-key")
+    },
+    fn: async () => {
+      const providers = await list()
+      expect(Object.keys(providers)).toEqual(["github-copilot"])
+      expect(providers[ProviderID.anthropic]).toBeUndefined()
+      const model = await defaultModel()
+      expect(model.providerID).toBe(ProviderID.make("github-copilot"))
+    },
+  })
+
+  if (previous === undefined) delete process.env.OPENCODE_ONLY_GITHUB
+  else process.env.OPENCODE_ONLY_GITHUB = previous
+})
 test("model whitelist filters models for provider", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {

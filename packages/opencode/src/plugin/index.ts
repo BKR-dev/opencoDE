@@ -17,6 +17,7 @@ import { CopilotAuthPlugin } from "./github-copilot/copilot"
 import { gitlabAuthPlugin as GitlabAuthPlugin } from "opencode-gitlab-auth"
 import { PoeAuthPlugin } from "opencode-poe-auth"
 import { CloudflareAIGatewayAuthPlugin, CloudflareWorkersAuthPlugin } from "./cloudflare"
+import { isGitHubOnlyMode } from "../gdpr/build-constants"
 import { Effect, Layer, Context, Stream } from "effect"
 import { EffectBridge } from "@/effect"
 import { InstanceState } from "@/effect"
@@ -55,12 +56,16 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Pl
 
 // Built-in plugins that are directly imported (not installed from npm)
 const INTERNAL_PLUGINS: PluginInstance[] = [
-  CodexAuthPlugin,
-  CopilotAuthPlugin,
-  GitlabAuthPlugin,
-  PoeAuthPlugin,
-  CloudflareWorkersAuthPlugin,
-  CloudflareAIGatewayAuthPlugin,
+  ...(isGitHubOnlyMode()
+    ? [CopilotAuthPlugin]
+    : [
+        CodexAuthPlugin,
+        CopilotAuthPlugin,
+        GitlabAuthPlugin,
+        PoeAuthPlugin,
+        CloudflareWorkersAuthPlugin,
+        CloudflareAIGatewayAuthPlugin,
+      ]),
 ]
 
 function isServerPlugin(value: unknown): value is PluginInstance {
@@ -158,7 +163,7 @@ export const layer = Layer.effect(
           if (init._tag === "Some") hooks.push(init.value)
         }
 
-        const plugins = Flag.OPENCODE_PURE ? [] : (cfg.plugin_origins ?? [])
+        const plugins = Flag.OPENCODE_PURE || isGitHubOnlyMode() ? [] : (cfg.plugin_origins ?? [])
         if (Flag.OPENCODE_PURE && cfg.plugin_origins?.length) {
           log.info("skipping external plugins in pure mode", { count: cfg.plugin_origins.length })
         }

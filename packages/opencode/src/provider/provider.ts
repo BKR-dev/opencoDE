@@ -25,6 +25,7 @@ import { InstanceState } from "@/effect"
 import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import { isRecord } from "@/util/record"
 import { withStatics } from "@/util/schema"
+import { isGitHubOnlyMode } from "../gdpr/build-constants"
 
 import * as ProviderTransform from "./transform"
 import { ModelID, ProviderID } from "./schema"
@@ -1112,8 +1113,22 @@ const layer: Layer.Layer<
 
         // now read config providers - includes any modifications from plugin config() hook
         const configProviders = Object.entries(cfg.provider ?? {})
-        const disabled = new Set(cfg.disabled_providers ?? [])
-        const enabled = cfg.enabled_providers ? new Set(cfg.enabled_providers) : null
+        const githubOnlyMode = isGitHubOnlyMode()
+        const disabled = githubOnlyMode
+          ? new Set<ProviderID>()
+          : new Set((cfg.disabled_providers ?? []).map((id) => ProviderID.make(id)))
+        const enabled = githubOnlyMode
+          ? new Set([ProviderID.make("github-copilot")])
+          : cfg.enabled_providers
+            ? new Set(cfg.enabled_providers.map((id) => ProviderID.make(id)))
+            : null
+
+        if (githubOnlyMode) {
+          const copilotID = ProviderID.make("github-copilot")
+          if (database[copilotID]) {
+            mergeProvider(copilotID, {})
+          }
+        }
 
         function isProviderAllowed(providerID: ProviderID): boolean {
           if (enabled && !enabled.has(providerID)) return false
@@ -1670,8 +1685,10 @@ const layer: Layer.Layer<
         return { providerID: entry.providerID, modelID: entry.modelID }
       }
 
-      const provider = Object.values(s.providers).find((p) => !cfg.provider || Object.keys(cfg.provider).includes(p.id))
-      if (!provider) throw new Error("no providers found")
+        const provider = isGitHubOnlyMode()
+          ? s.providers[ProviderID.make("github-copilot")]
+          : Object.values(s.providers).find((p) => !cfg.provider || Object.keys(cfg.provider).includes(p.id))
+        if (!provider) throw new Error("no providers found")
       const [model] = sort(Object.values(provider.models))
       if (!model) throw new Error("no models found")
       return {

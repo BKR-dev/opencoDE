@@ -3,6 +3,7 @@ import { HttpClient } from "effect/unstable/http"
 import * as Tool from "./tool"
 import * as McpExa from "./mcp-exa"
 import DESCRIPTION from "./websearch.txt"
+import { isGitHubOnlyMode } from "../gdpr/build-constants"
 
 export const Parameters = Schema.Struct({
   query: Schema.String.annotate({ description: "Websearch query" }),
@@ -33,6 +34,10 @@ export const WebSearchTool = Tool.define(
       parameters: Parameters,
       execute: (params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
+          if (isGitHubOnlyMode()) {
+            throw new Error("websearch tool disabled in GitHub-only mode")
+          }
+
           yield* ctx.ask({
             permission: "websearch",
             patterns: [params.query],

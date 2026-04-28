@@ -8,6 +8,8 @@ import { lazy } from "@/util/lazy"
 import { Filesystem } from "../util"
 import { Flock } from "@opencode-ai/shared/util/flock"
 import { Hash } from "@opencode-ai/shared/util/hash"
+import { logModelMetadataFetch } from "../audit/gdpr"
+import { isGitHubOnlyMode } from "../gdpr/build-constants"
 
 // Try to import bundled snapshot (generated at build time)
 // Falls back to undefined in dev mode when snapshot doesn't exist
@@ -149,6 +151,15 @@ export async function get() {
 }
 
 export async function refresh(force = false) {
+  if (isGitHubOnlyMode()) {
+    log.info("models.dev fetch blocked in GitHub-only (GDPR) mode")
+    logModelMetadataFetch({
+      source: "models.dev",
+      blocked: true,
+      reason: "github_only_mode_active",
+    })
+    return
+  }
   if (skip(force)) return Data.reset()
   await Flock.withLock(`models-dev:${filepath}`, async () => {
     if (skip(force)) return Data.reset()

@@ -39,6 +39,8 @@ import { PluginCommand } from "./cli/cmd/plug"
 import { Heap } from "./cli/heap"
 import { drizzle } from "drizzle-orm/bun-sqlite"
 import { ensureProcessMetadata } from "./util/opencode-process"
+import { logGDPRStatus } from "./gdpr/build-constants"
+import { enableNetworkAudit } from "./audit/network"
 
 const processMetadata = ensureProcessMetadata("main")
 
@@ -85,6 +87,10 @@ const cli = yargs(args)
   })
   .option("pure", {
     describe: "run without external plugins",
+    type: "boolean",
+  })
+  .option("audit", {
+    describe: "enable network audit logging (logs all HTTP requests for GDPR compliance verification)",
     type: "boolean",
   })
   .middleware(async (opts) => {
@@ -150,6 +156,14 @@ const cli = yargs(args)
         }
       }
       process.stderr.write("Database migration complete." + EOL)
+    }
+
+    // Log GDPR status at startup
+    logGDPRStatus()
+
+    // Enable network audit mode if --audit flag is present
+    if (opts.audit || process.argv.includes("--audit")) {
+      enableNetworkAudit()
     }
   })
   .usage("")

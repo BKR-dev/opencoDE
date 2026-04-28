@@ -36,6 +36,23 @@ function exec(args: { url: string; format: "text" | "markdown" | "html" }) {
 }
 
 describe("tool.webfetch", () => {
+  test("is disabled in GitHub-only mode", async () => {
+    const previous = process.env.OPENCODE_ONLY_GITHUB
+    process.env.OPENCODE_ONLY_GITHUB = "1"
+
+    await Instance.provide({
+      directory: projectRoot,
+      fn: async () => {
+        await expect(exec({ url: "https://example.com", format: "text" })).rejects.toThrow(
+          "webfetch tool disabled in GitHub-only mode",
+        )
+      },
+    })
+
+    if (previous === undefined) delete process.env.OPENCODE_ONLY_GITHUB
+    else process.env.OPENCODE_ONLY_GITHUB = previous
+  })
+
   test("returns image responses as file attachments", async () => {
     const bytes = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10])
     await withFetch(
