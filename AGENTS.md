@@ -63,14 +63,37 @@ make verify-gdpr
 
 ## CI / Upstream Sync
 
-Sync is fully automated via `.github/workflows/sync-upstream.yml`:
+Upstream sync is driven by local `make` commands using upstream GitHub release tags. The Makefile, not a GitHub Actions workflow, is the source of truth for this process.
 
-- Runs **daily at 06:00 UTC**
-- Reads `.github/upstream-version` (current: `v1.2.15`) to detect new upstream releases
-- If a new release exists on `anomalyco/opencode`, creates branch `sync/upstream-vX.X.X`, merges with `-X ours` (GDPR fork always wins conflicts), opens a PR to `gdpr/main`
-- PR always opened — even with conflict markers — for developer review
+Normal flow:
 
-**No tests run in CI.** All validation is manual via `make validate-gdpr`.
+```bash
+# Step 1: validate environment and repo state
+make sync-preflight TAG=vX.X.X
+
+# Step 2: detect the target release tag and prepare the sync branch
+make sync-check TAG=vX.X.X
+
+# Step 3: review the sync branch locally
+make sync-checkout TAG=vX.X.X
+
+# Step 4: run local GDPR validation
+make sync-validate
+make verify-gdpr
+
+# Step 5: merge the open sync PR
+make sync-merge
+```
+
+Behavioral notes:
+
+- `sync-preflight` is the first command for maintainers and AI agents
+- Source of truth is the latest upstream GitHub release tag, or an explicit `TAG=vX.X.X`
+- `sync-check` is safe to run from cron when already up to date
+- `sync-check` creates or resets the local `sync/upstream-vX.X.X` branch from `origin/gdpr/main` and reuses an existing PR if one is already open
+- Validation remains manual via `make sync-validate` and `make verify-gdpr`
+- Agents should classify failures into environment, git/worktree, merge, baseline health, validation, or remote-integration failures
+- Agents may fix issues within a clearly identified bucket, but should stop and report if root cause is unclear
 
 **After merging a sync PR:**
 
@@ -81,7 +104,7 @@ git commit -m "chore: update upstream-version to vX.X.X post-merge"
 git push origin gdpr/main
 ```
 
-**Manual trigger** (optional): Go to [Actions → Sync Upstream](https://github.com/BKR-dev/opencoDE/actions/workflows/sync-upstream.yml) → Run workflow → optionally specify a tag.
+After merging a sync PR, update `.github/upstream-version` on `gdpr/main` and push it.
 
 ---
 
@@ -90,7 +113,7 @@ git push origin gdpr/main
 | Branch | Purpose |
 |---|---|
 | `gdpr/main` | Primary branch — always GDPR-compliant |
-| `sync/upstream-vX.X.X` | Auto-created by CI for each upstream release, deleted after merge |
+| `sync/upstream-vX.X.X` | Release-tag sync branch created by `make sync-check` |
 | `feat/*`, `fix/*` | Short-lived working branches |
 
 ---

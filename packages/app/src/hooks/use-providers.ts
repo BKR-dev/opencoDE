@@ -4,6 +4,7 @@ import { useParams } from "@solidjs/router"
 import { createMemo } from "solid-js"
 
 export const popularProviders = ["github-copilot"]
+const popularProviderSet = new Set(popularProviders)
 
 export function useProviders() {
   const globalSync = useGlobalSync()
