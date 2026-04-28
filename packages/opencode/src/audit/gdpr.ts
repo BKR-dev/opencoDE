@@ -114,7 +114,7 @@ export function logExternalAPI(params: {
     method: "POST",
     ...params,
     time: new Date().toISOString(),
-    egressBlocked: isExternalAPIBlocked(),
+    egressBlocked: isExternalAPIBlocked() || isGitHubOnlyMode(),
   })
 }
 

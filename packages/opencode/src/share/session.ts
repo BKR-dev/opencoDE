@@ -4,6 +4,7 @@ import { SyncEvent } from "@/sync"
 import { Effect, Layer, Scope, Context } from "effect"
 import { Config } from "../config"
 import { Flag } from "../flag/flag"
+import { isSessionSharingDisabled } from "../gdpr/build-constants"
 import * as ShareNext from "./share-next"
 
 export interface Interface {
@@ -24,7 +25,7 @@ export const layer = Layer.effect(
 
     const share = Effect.fn("SessionShare.share")(function* (sessionID: SessionID) {
       const conf = yield* cfg.get()
-      if (conf.share === "disabled") throw new Error("Sharing is disabled in configuration")
+      if (isSessionSharingDisabled() || conf.share === "disabled") return { url: "" }
       const result = yield* shareNext.create(sessionID)
       yield* Effect.sync(() =>
         SyncEvent.run(Session.Event.Updated, { sessionID, info: { share: { url: result.url } } }),
@@ -33,6 +34,7 @@ export const layer = Layer.effect(
     })
 
     const unshare = Effect.fn("SessionShare.unshare")(function* (sessionID: SessionID) {
+      if (isSessionSharingDisabled()) return
       yield* shareNext.remove(sessionID)
       yield* Effect.sync(() => SyncEvent.run(Session.Event.Updated, { sessionID, info: { share: { url: null } } }))
     })
@@ -40,6 +42,7 @@ export const layer = Layer.effect(
     const create = Effect.fn("SessionShare.create")(function* (input?: Session.CreateInput) {
       const result = yield* session.create(input)
       if (result.parentID) return result
+      if (isSessionSharingDisabled()) return result
       const conf = yield* cfg.get()
       if (!(Flag.OPENCODE_AUTO_SHARE || conf.share === "auto")) return result
       yield* share(result.id).pipe(Effect.ignore, Effect.forkIn(scope))

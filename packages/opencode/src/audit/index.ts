@@ -2,7 +2,7 @@ import path from "path"
 import fs from "fs/promises"
 import { Global } from "../global"
 import os from "os"
-import { Log } from "../util/log"
+import { Log } from "../util"
 
 const auditFile = path.join(Global.Path.log, "audit.jsonl")
 const homeAuditDir = path.join(os.homedir(), ".opencode", "audit")

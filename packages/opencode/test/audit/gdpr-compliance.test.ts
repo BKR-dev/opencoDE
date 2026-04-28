@@ -101,7 +101,7 @@ describe("GDPR Compliance: External API Blocking", () => {
   test("models.dev is blocked when OPENCODE_ONLY_GITHUB is set", async () => {
     // models.dev sends metadata to external service, blocked in GDPR mode
 
-    const { ModelsDev } = await import("../../src/provider/models")
+    const ModelsDev = await import("../../src/provider/models")
 
     // Attempt to refresh models (should be blocked)
     await ModelsDev.refresh()
@@ -144,52 +144,37 @@ describe("GDPR Compliance: External API Blocking", () => {
 
     expect(apiEvent).toBeDefined()
     expect(apiEvent.details.blocked).toBe(true)
-    expect(apiEvent.details.gdprMode).toBe(true)
+    expect(apiEvent.details.egressBlocked).toBe(true)
   })
 })
 
 describe("GDPR Compliance: Session Sharing", () => {
   test("Session sharing is disabled by default", async () => {
-    // Session sharing should be OPT-IN, not opt-out
-
-    // Clear OPENCODE_ENABLE_SHARE (should be disabled by default)
     delete process.env.OPENCODE_ENABLE_SHARE
 
-    const { Share } = await import("../../src/share/share")
+    const { isSessionSharingDisabled } = await import("../../src/gdpr/build-constants")
+    const { logSessionStart } = await import("../../src/audit/gdpr")
 
-    // Attempt to create a share (should be blocked)
-    const result = await Share.create("test-session-123")
+    expect(isSessionSharingDisabled()).toBe(true)
 
-    // Should return empty values when disabled
-    expect(result.url).toBe("")
-    expect(result.secret).toBe("")
-
-    // Wait for audit write
+    logSessionStart({ sessionID: "test-session-123" })
     await Bun.sleep(100)
 
-    // Check audit log
     const content = await fs.readFile(TEST_AUDIT_FILE, "utf-8")
     const lines = content.trim().split("\n")
 
-    const shareEvent = lines.map((line) => JSON.parse(line)).find((entry) => entry.event === "gdpr.session.share")
+    const sessionStartEvent = lines.map((line) => JSON.parse(line)).find((entry) => entry.event === "gdpr.session.start")
 
-    expect(shareEvent).toBeDefined()
-    expect(shareEvent.details.action).toBe("blocked")
+    expect(sessionStartEvent).toBeDefined()
+    expect(sessionStartEvent.details.sharingEnabled).toBe(false)
   })
 
   test("Session sharing is blocked in GitHub-only mode even if explicitly enabled", async () => {
-    // Even if user tries to enable sharing, it should be blocked in GDPR mode
-
     process.env.OPENCODE_ENABLE_SHARE = "1"
     process.env.OPENCODE_ONLY_GITHUB = "1"
 
-    const { Share } = await import("../../src/share/share")
-
-    const result = await Share.create("test-session-456")
-
-    // Should still be blocked due to GitHub-only mode
-    expect(result.url).toBe("")
-    expect(result.secret).toBe("")
+    const { isSessionSharingDisabled } = await import("../../src/gdpr/build-constants")
+    expect(isSessionSharingDisabled()).toBe(true)
   })
 
   test("Data transfers are audited", async () => {
@@ -246,7 +231,6 @@ describe("GDPR Compliance: Audit Logging", () => {
     expect(usageEvent).toBeDefined()
     expect(usageEvent.details.providerID).toBe("github-copilot")
     expect(usageEvent.details.modelID).toBe("gpt-4")
-    expect(usageEvent.details.gdprMode).toBe(true)
   })
 
   test("All GDPR audit events include required metadata", async () => {

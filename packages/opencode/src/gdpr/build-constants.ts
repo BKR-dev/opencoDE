@@ -101,6 +101,7 @@ export function isTelemetryDisabled(): boolean {
  */
 export function isSessionSharingDisabled(): boolean {
   if (typeof OPENCODE_GDPR_DISABLE_SHARE !== "undefined" && OPENCODE_GDPR_DISABLE_SHARE) return true
+  if (isGitHubOnlyMode()) return true
 
   // In standard builds, session sharing is opt-in (disabled by default)
   const explicitlyEnabled = process.env.OPENCODE_ENABLE_SHARE === "1"

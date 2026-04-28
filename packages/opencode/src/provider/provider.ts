@@ -3,9 +3,9 @@ import fuzzysort from "fuzzysort"
 import { Config } from "../config"
 import { mapValues, mergeDeep, omit, pickBy, sortBy } from "remeda"
 import { NoSuchModelError, type Provider as SDK } from "ai"
-import { type LanguageModelV2 } from "@ai-sdk/provider"
-import { Log } from "../util/log"
-import { BunProc } from "../bun"
+import { Log } from "../util"
+import { Npm } from "../npm"
+import { Hash } from "@opencode-ai/shared/util/hash"
 import { Plugin } from "../plugin"
 import { type LanguageModelV3 } from "@ai-sdk/provider"
 import * as ModelsDev from "./models"
@@ -25,15 +25,10 @@ import { InstanceState } from "@/effect"
 import { AppFileSystem } from "@opencode-ai/shared/filesystem"
 import { isRecord } from "@/util/record"
 import { withStatics } from "@/util/schema"
-
-// Direct imports for bundled providers
-
-import { createOpenaiCompatible as createGitHubCopilotOpenAICompatible } from "./sdk/openai-compatible/src"
-
-import { ProviderTransform } from "./transform"
-import { packageAllowed } from "../net/egress-policy"
-import { logProviderUsage, logProviderFilter } from "../audit/gdpr"
 import { isGitHubOnlyMode } from "../gdpr/build-constants"
+
+import * as ProviderTransform from "./transform"
+import { ModelID, ProviderID } from "./schema"
 
 const log = Log.create({ service: "provider" })
 
@@ -48,9 +43,16 @@ function wrapSSE(res: Response, ms: number, ctl: AbortController) {
   if (!res.body) return res
   if (!res.headers.get("content-type")?.includes("text/event-stream")) return res
 
-  const BUNDLED_PROVIDERS: Record<string, (options?: any) => any> = {
-    "@ai-sdk/github-copilot": createGitHubCopilotOpenAICompatible,
-  }
+  const reader = res.body.getReader()
+  const body = new ReadableStream<Uint8Array>({
+    async pull(ctrl) {
+      const part = await new Promise<Awaited<ReturnType<typeof reader.read>>>((resolve, reject) => {
+        const id = setTimeout(() => {
+          const err = new Error("SSE read timed out")
+          ctl.abort(err)
+          void reader.cancel(err)
+          reject(err)
+        }, ms)
 
         reader.read().then(
           (part) => {
@@ -274,7 +276,12 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
         process.env.AWS_CONTAINER_CREDENTIALS_RELATIVE_URI || process.env.AWS_CONTAINER_CREDENTIALS_FULL_URI,
       )
 
-      const providerOptions: any = {
+      if (!profile && !awsAccessKeyId && !awsBearerToken && !awsWebIdentityTokenFile && !containerCreds)
+        return { autoload: false }
+
+      const { fromNodeProviderChain } = yield* Effect.promise(() => import("@aws-sdk/credential-providers"))
+
+      const providerOptions: Record<string, any> = {
         region: defaultRegion,
       }
 
@@ -700,13 +707,12 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
           },
         },
         async getModel(sdk: any, modelID: string) {
-          return sdk.agenticChat(modelID, {
-            featureFlags: {
-              duo_agent_platform_agentic_chat: true,
-              duo_agent_platform: true,
-              ...(providerConfig?.options?.featureFlags || {}),
-            },
-          })
+          return sdk.languageModel(modelID)
+        },
+        vars(_options) {
+          return {
+            CLOUDFLARE_ACCOUNT_ID: accountId,
+          }
         },
       }
     }),
@@ -1013,239 +1019,24 @@ function fromModelsDevModel(provider: ModelsDev.Provider, model: ModelsDev.Model
   }
 }
 
-  const state = Instance.state(async () => {
-    using _ = log.time("state")
-    const config = await Config.get()
-    const modelsDev = await ModelsDev.get()
-    const database = mapValues(modelsDev, fromModelsDevProvider)
-
-    // GDPR Compliance: Enforce OPENCODE_ONLY_GITHUB - prevent config overrides
-    // When OPENCODE_ONLY_GITHUB is set, only github-copilot providers are allowed
-    // This ensures European deployments cannot bypass provider restrictions via config
-    // In GDPR builds, this is hardcoded at build time and cannot be overridden
-    const githubOnlyMode = isGitHubOnlyMode()
-
-    const disabled = githubOnlyMode
-      ? new Set<string>() // In GitHub-only mode, disable list is ignored
-      : new Set(config.disabled_providers ?? [])
-
-    const enabled = githubOnlyMode
-      ? new Set(["github-copilot", "github-copilot-enterprise"]) // Force GitHub-only
-      : config.enabled_providers
-        ? new Set(config.enabled_providers)
-        : null
-
-    function isProviderAllowed(providerID: string): boolean {
-      const allowed = (() => {
-        if (enabled && !enabled.has(providerID)) return false
-        if (disabled.has(providerID)) return false
-        return true
-      })()
-
-      // GDPR Audit: Log provider filtering decisions
-      if (!allowed || githubOnlyMode) {
-        logProviderFilter({
-          providerID,
-          allowed,
-          reason: !allowed
-            ? enabled && !enabled.has(providerID)
-              ? "not_in_enabled_list"
-              : "in_disabled_list"
-            : "github_only_mode_active",
-          githubOnlyMode,
-        })
-      }
-
-      return allowed
-    }
-
-    const providers: { [providerID: string]: Info } = {}
-    const languages = new Map<string, LanguageModelV2>()
-    const modelLoaders: {
-      [providerID: string]: CustomModelLoader
-    } = {}
-    const sdk = new Map<number, SDK>()
-
-    log.info("init")
-
-    const configProviders = Object.entries(config.provider ?? {})
-
-    // Add GitHub Copilot Enterprise provider that inherits from GitHub Copilot
-    if (database["github-copilot"]) {
-      const githubCopilot = database["github-copilot"]
-      database["github-copilot-enterprise"] = {
-        ...githubCopilot,
-        id: "github-copilot-enterprise",
-        name: "GitHub Copilot Enterprise",
-        models: mapValues(githubCopilot.models, (model) => ({
-          ...model,
-          providerID: "github-copilot-enterprise",
-        })),
-      }
-    }
-
-    function mergeProvider(providerID: string, provider: Partial<Info>) {
-      const existing = providers[providerID]
-      if (existing) {
-        // @ts-expect-error
-        providers[providerID] = mergeDeep(existing, provider)
-        return
-      }
-      const match = database[providerID]
-      if (!match) return
-      // @ts-expect-error
-      providers[providerID] = mergeDeep(match, provider)
-    }
-
-    // When OPENCODE_ONLY_GITHUB is enabled, ensure github-copilot providers are present even without env/auth/plugins
-    if (process.env.OPENCODE_ONLY_GITHUB) {
-      if (database["github-copilot"]) mergeProvider("github-copilot", {})
-      if (database["github-copilot-enterprise"]) mergeProvider("github-copilot-enterprise", {})
-    }
-
-    // extend database from config
-    for (const [providerID, provider] of configProviders) {
-      const existing = database[providerID]
-      const parsed: Info = {
-        id: providerID,
-        name: provider.name ?? existing?.name ?? providerID,
-        env: provider.env ?? existing?.env ?? [],
-        options: mergeDeep(existing?.options ?? {}, provider.options ?? {}),
-        source: "config",
-        models: existing?.models ?? {},
-      }
-
-      for (const [modelID, model] of Object.entries(provider.models ?? {})) {
-        const existingModel = parsed.models[model.id ?? modelID]
-        const name = iife(() => {
-          if (model.name) return model.name
-          if (model.id && model.id !== modelID) return modelID
-          return existingModel?.name ?? modelID
-        })
-        const parsedModel: Model = {
-          id: modelID,
-          api: {
-            id: model.id ?? existingModel?.api.id ?? modelID,
-            npm:
-              model.provider?.npm ??
-              provider.npm ??
-              existingModel?.api.npm ??
-              modelsDev[providerID]?.npm ??
-              "@ai-sdk/openai-compatible",
-            url: provider?.api ?? existingModel?.api.url ?? modelsDev[providerID]?.api,
-          },
-          status: model.status ?? existingModel?.status ?? "active",
-          name,
-          providerID,
-          capabilities: {
-            temperature: model.temperature ?? existingModel?.capabilities.temperature ?? false,
-            reasoning: model.reasoning ?? existingModel?.capabilities.reasoning ?? false,
-            attachment: model.attachment ?? existingModel?.capabilities.attachment ?? false,
-            toolcall: model.tool_call ?? existingModel?.capabilities.toolcall ?? true,
-            input: {
-              text: model.modalities?.input?.includes("text") ?? existingModel?.capabilities.input.text ?? true,
-              audio: model.modalities?.input?.includes("audio") ?? existingModel?.capabilities.input.audio ?? false,
-              image: model.modalities?.input?.includes("image") ?? existingModel?.capabilities.input.image ?? false,
-              video: model.modalities?.input?.includes("video") ?? existingModel?.capabilities.input.video ?? false,
-              pdf: model.modalities?.input?.includes("pdf") ?? existingModel?.capabilities.input.pdf ?? false,
-            },
-            output: {
-              text: model.modalities?.output?.includes("text") ?? existingModel?.capabilities.output.text ?? true,
-              audio: model.modalities?.output?.includes("audio") ?? existingModel?.capabilities.output.audio ?? false,
-              image: model.modalities?.output?.includes("image") ?? existingModel?.capabilities.output.image ?? false,
-              video: model.modalities?.output?.includes("video") ?? existingModel?.capabilities.output.video ?? false,
-              pdf: model.modalities?.output?.includes("pdf") ?? existingModel?.capabilities.output.pdf ?? false,
-            },
-            interleaved: model.interleaved ?? false,
-          },
-          cost: {
-            input: model?.cost?.input ?? existingModel?.cost?.input ?? 0,
-            output: model?.cost?.output ?? existingModel?.cost?.output ?? 0,
-            cache: {
-              read: model?.cost?.cache_read ?? existingModel?.cost?.cache.read ?? 0,
-              write: model?.cost?.cache_write ?? existingModel?.cost?.cache.write ?? 0,
-            },
-          },
-          options: mergeDeep(existingModel?.options ?? {}, model.options ?? {}),
-          limit: {
-            context: model.limit?.context ?? existingModel?.limit?.context ?? 0,
-            output: model.limit?.output ?? existingModel?.limit?.output ?? 0,
-          },
-          headers: mergeDeep(existingModel?.headers ?? {}, model.headers ?? {}),
-          family: model.family ?? existingModel?.family ?? "",
-          release_date: model.release_date ?? existingModel?.release_date ?? "",
-          variants: {},
-        }
-        const merged = mergeDeep(ProviderTransform.variants(parsedModel), model.variants ?? {})
-        parsedModel.variants = mapValues(
-          pickBy(merged, (v) => !v.disabled),
-          (v) => omit(v, ["disabled"]),
-        )
-        parsed.models[modelID] = parsedModel
-      }
-      database[providerID] = parsed
-    }
-
-    // load env
-    const env = Env.all()
-    for (const [providerID, provider] of Object.entries(database)) {
-      if (disabled.has(providerID)) continue
-      const apiKey = provider.env.map((item) => env[item]).find(Boolean)
-      if (!apiKey) continue
-      mergeProvider(providerID, {
-        source: "env",
-        key: provider.env.length === 1 ? apiKey : undefined,
-      })
-    }
-
-    // load apikeys
-    for (const [providerID, provider] of Object.entries(await Auth.all())) {
-      if (disabled.has(providerID)) continue
-      if (provider.type === "api") {
-        mergeProvider(providerID, {
-          source: "api",
-          key: provider.key,
-        })
-      }
-    }
-
-    for (const plugin of await Plugin.list()) {
-      if (!plugin.auth) continue
-      const providerID = plugin.auth.provider
-      if (disabled.has(providerID)) continue
-
-      // For github-copilot plugin, check if auth exists for either github-copilot or github-copilot-enterprise
-      let hasAuth = false
-      const auth = await Auth.get(providerID)
-      if (auth) hasAuth = true
-
-      // Special handling for github-copilot: also check for enterprise auth
-      if (providerID === "github-copilot" && !hasAuth) {
-        const enterpriseAuth = await Auth.get("github-copilot-enterprise")
-        if (enterpriseAuth) hasAuth = true
-      }
-
-      if (!hasAuth) continue
-      if (!plugin.auth.loader) continue
-
-      // Load for the main provider if auth exists
-      if (auth) {
-        const options = await plugin.auth.loader(() => Auth.get(providerID) as any, database[plugin.auth.provider])
-        mergeProvider(plugin.auth.provider, {
-          source: "custom",
-          options: options,
-        })
-      }
-
-      // If this is github-copilot plugin, also register for github-copilot-enterprise if auth exists
-      if (providerID === "github-copilot") {
-        const enterpriseProviderID = "github-copilot-enterprise"
-        if (!disabled.has(enterpriseProviderID)) {
-          const enterpriseAuth = await Auth.get(enterpriseProviderID)
-          if (enterpriseAuth) {
-            const enterpriseOptions = await plugin.auth.loader(
-              () => Auth.get(enterpriseProviderID) as any,
-              database[enterpriseProviderID],
+export function fromModelsDevProvider(provider: ModelsDev.Provider): Info {
+  const models: Record<string, Model> = {}
+  for (const [key, model] of Object.entries(provider.models)) {
+    models[key] = fromModelsDevModel(provider, model)
+    for (const [mode, opts] of Object.entries(model.experimental?.modes ?? {})) {
+      const id = `${model.id}-${mode}`
+      const base = fromModelsDevModel(provider, model)
+      models[id] = {
+        ...base,
+        id: ModelID.make(id),
+        name: `${model.name} ${mode[0].toUpperCase()}${mode.slice(1)}`,
+        cost: opts.cost ? mergeDeep(base.cost, cost(opts.cost)) : base.cost,
+        options: opts.provider?.body
+          ? Object.fromEntries(
+              Object.entries(opts.provider.body).map(([k, v]) => [
+                k.replace(/_([a-z])/g, (_, c) => c.toUpperCase()),
+                v,
+              ]),
             )
           : base.options,
         headers: opts.provider?.headers ?? base.headers,
@@ -1322,8 +1113,22 @@ const layer: Layer.Layer<
 
         // now read config providers - includes any modifications from plugin config() hook
         const configProviders = Object.entries(cfg.provider ?? {})
-        const disabled = new Set(cfg.disabled_providers ?? [])
-        const enabled = cfg.enabled_providers ? new Set(cfg.enabled_providers) : null
+        const githubOnlyMode = isGitHubOnlyMode()
+        const disabled = githubOnlyMode
+          ? new Set<ProviderID>()
+          : new Set((cfg.disabled_providers ?? []).map((id) => ProviderID.make(id)))
+        const enabled = githubOnlyMode
+          ? new Set([ProviderID.make("github-copilot")])
+          : cfg.enabled_providers
+            ? new Set(cfg.enabled_providers.map((id) => ProviderID.make(id)))
+            : null
+
+        if (githubOnlyMode) {
+          const copilotID = ProviderID.make("github-copilot")
+          if (database[copilotID]) {
+            mergeProvider(copilotID, {})
+          }
+        }
 
         function isProviderAllowed(providerID: ProviderID): boolean {
           if (enabled && !enabled.has(providerID)) return false
@@ -1454,82 +1259,15 @@ const layer: Layer.Layer<
           if (!stored) continue
           if (!plugin.auth.loader) continue
 
-    for (const [providerID, provider] of Object.entries(providers)) {
-      if (!isProviderAllowed(providerID)) {
-        delete providers[providerID]
-        continue
-      }
-
-      const configProvider = config.provider?.[providerID]
-
-      for (const [modelID, model] of Object.entries(provider.models)) {
-        model.api.id = model.api.id ?? model.id ?? modelID
-        if (modelID === "gpt-5-chat-latest") delete provider.models[modelID]
-        if (model.status === "alpha" && !Flag.OPENCODE_ENABLE_EXPERIMENTAL_MODELS) delete provider.models[modelID]
-        if (model.status === "deprecated") delete provider.models[modelID]
-        if (
-          (configProvider?.blacklist && configProvider.blacklist.includes(modelID)) ||
-          (configProvider?.whitelist && !configProvider.whitelist.includes(modelID))
-        )
-          delete provider.models[modelID]
-
-        // Filter out disabled variants from config
-        const configVariants = configProvider?.models?.[modelID]?.variants
-        if (configVariants && model.variants) {
-          const merged = mergeDeep(model.variants, configVariants)
-          model.variants = mapValues(
-            pickBy(merged, (v) => !v.disabled),
-            (v) => omit(v, ["disabled"]),
+          const options = yield* Effect.promise(() =>
+            plugin.auth!.loader!(
+              () => bridge.promise(auth.get(providerID).pipe(Effect.orDie)) as any,
+              database[plugin.auth!.provider],
+            ),
           )
-        }
-      }
-
-      if (Object.keys(provider.models).length === 0) {
-        delete providers[providerID]
-        continue
-      }
-
-      log.info("found", { providerID })
-    }
-
-    log.info("modelsDev.database_keys", { keys: Object.keys(database) })
-    log.info("modelsDev.providers_keys", { keys: Object.keys(providers) })
-    log.info("modelsDev.providers_model_counts", {
-      counts: Object.fromEntries(
-        Object.entries(providers).map(([k, v]) => [k, Object.keys((v as any).models ?? {}).length]),
-      ),
-    })
-    return {
-      models: languages,
-      providers,
-      sdk,
-      modelLoaders,
-    }
-  })
-
-  export async function list() {
-    return state().then((state) => state.providers)
-  }
-
-  async function getSDK(model: Model) {
-    try {
-      using _ = log.time("getSDK", {
-        providerID: model.providerID,
-      })
-      const s = await state()
-      const provider = s.providers[model.providerID]
-      const options = { ...provider.options }
-
-      if (model.api.npm.includes("@ai-sdk/openai-compatible") && options["includeUsage"] !== false) {
-        options["includeUsage"] = true
-      }
-
-      if (!options["baseURL"]) options["baseURL"] = model.api.url
-      if (options["apiKey"] === undefined && provider.key) options["apiKey"] = provider.key
-      if (model.headers)
-        options["headers"] = {
-          ...options["headers"],
-          ...model.headers,
+          const opts = options ?? {}
+          const patch: Partial<Info> = providers[providerID] ? { options: opts } : { source: "custom", options: opts }
+          mergeProvider(providerID, patch)
         }
 
         for (const [id, fn] of Object.entries(custom(dep))) {
@@ -1813,16 +1551,11 @@ const layer: Layer.Layer<
         throw new ModelNotFoundError({ providerID, modelID, suggestions: matches.map((m) => m.target) })
       }
 
-      let installedPath: string
-      if (!model.api.npm.startsWith("file://")) {
-        // Prevent installing packages not allowed under OPENCODE_BLOCK_EXTERNAL_APIS
-        if (!packageAllowed(model.api.npm)) {
-          throw new Error(`Blocked install of package ${model.api.npm} due to OPENCODE_BLOCK_EXTERNAL_APIS`)
-        }
-        installedPath = await BunProc.install(model.api.npm, "latest")
-      } else {
-        log.info("loading local provider", { pkg: model.api.npm })
-        installedPath = model.api.npm
+      const info = provider.models[modelID]
+      if (!info) {
+        const available = Object.keys(provider.models)
+        const matches = fuzzysort.go(modelID, available, { limit: 3, threshold: -10000 })
+        throw new ModelNotFoundError({ providerID, modelID, suggestions: matches.map((m) => m.target) })
       }
       return info
     })
@@ -1952,8 +1685,10 @@ const layer: Layer.Layer<
         return { providerID: entry.providerID, modelID: entry.modelID }
       }
 
-      const provider = Object.values(s.providers).find((p) => !cfg.provider || Object.keys(cfg.provider).includes(p.id))
-      if (!provider) throw new Error("no providers found")
+        const provider = isGitHubOnlyMode()
+          ? s.providers[ProviderID.make("github-copilot")]
+          : Object.values(s.providers).find((p) => !cfg.provider || Object.keys(cfg.provider).includes(p.id))
+        if (!provider) throw new Error("no providers found")
       const [model] = sort(Object.values(provider.models))
       if (!model) throw new Error("no models found")
       return {
@@ -1962,33 +1697,9 @@ const layer: Layer.Layer<
       }
     })
 
-    const provider = await list()
-      .then((val) => Object.values(val))
-      .then((x) => x.find((p) => !cfg.provider || Object.keys(cfg.provider).includes(p.id)))
-
-    // If no provider was found, and we're in GitHub-only mode, fall back to github-copilot if available
-    if (!provider && process.env.OPENCODE_ONLY_GITHUB) {
-      const providers = await list()
-      const github = providers["github-copilot"] || providers["github-copilot-enterprise"]
-      if (github) {
-        const [model] = sort(Object.values(github.models))
-        if (model) {
-          return {
-            providerID: github.id,
-            modelID: model.id,
-          }
-        }
-      }
-    }
-
-    if (!provider) throw new Error("no providers found")
-    const [model] = sort(Object.values(provider.models))
-    if (!model) throw new Error("no models found")
-    return {
-      providerID: provider.id,
-      modelID: model.id,
-    }
-  }
+    return Service.of({ list, getProvider, getModel, getLanguage, closest, getSmallModel, defaultModel })
+  }),
+)
 
 export const defaultLayer = Layer.suspend(() =>
   layer.pipe(

@@ -239,7 +239,7 @@ verify-gdpr: test-gdpr
 	fi
 	@echo ""
 	@echo "  [2/4] Checking models.dev blocking..."
-	@if grep -A5 "export async function refresh()" packages/opencode/src/provider/models.ts | grep -q "OPENCODE_ONLY_GITHUB"; then \
+	@if grep -A10 "export async function refresh" packages/opencode/src/provider/models.ts | grep -q "isGitHubOnlyMode()"; then \
 		echo "$(GREEN)    ✓ PASS: models.dev blocked in GDPR mode$(NC)"; \
 	else \
 		echo "$(RED)    ✗ FAIL: models.dev not blocked in GDPR mode$(NC)"; \
@@ -247,7 +247,7 @@ verify-gdpr: test-gdpr
 	fi
 	@echo ""
 	@echo "  [3/4] Checking session sharing defaults..."
-	@if grep -A10 "const disabled" packages/opencode/src/share/share.ts | grep -q "githubOnlyMode"; then \
+	@if grep -A5 "isSessionSharingDisabled()" packages/opencode/src/share/session.ts | grep -q "conf.share == \"disabled\"\|isSessionSharingDisabled()"; then \
 		echo "$(GREEN)    ✓ PASS: Session sharing disabled by default$(NC)"; \
 	else \
 		echo "$(RED)    ✗ FAIL: Session sharing not properly disabled$(NC)"; \
@@ -255,7 +255,7 @@ verify-gdpr: test-gdpr
 	fi
 	@echo ""
 	@echo "  [4/4] Checking config override protection..."
-	@if grep -A5 "githubOnlyMode = " packages/opencode/src/provider/provider.ts | grep -q "OPENCODE_ONLY_GITHUB"; then \
+	@if grep -A12 "const githubOnlyMode = isGitHubOnlyMode()" packages/opencode/src/provider/provider.ts | grep -q 'github-copilot'; then \
 		echo "$(GREEN)    ✓ PASS: Config override protection in place$(NC)"; \
 	else \
 		echo "$(RED)    ✗ FAIL: Config override protection missing$(NC)"; \
@@ -297,6 +297,34 @@ validate-gdpr: build-gdpr-single
 	echo "Inspect with:"; \
 	echo "  cat <audit-log-path> | jq ."
 
+## sync-preflight: Validate environment and repo state before running a sync
+## Usage: make sync-preflight TAG=v1.14.0
+sync-preflight:
+	@if ! command -v gh >/dev/null 2>&1; then \
+		echo "$(RED)ERROR: gh CLI not found. Install from https://cli.github.com$(NC)"; \
+		exit 1; \
+	fi
+	@if ! gh auth status >/dev/null 2>&1; then \
+		echo "$(RED)ERROR: gh CLI is not authenticated. Run 'gh auth login'.$(NC)"; \
+		exit 1; \
+	fi
+	@if [ -n "$$(git status --short)" ]; then \
+		echo "$(RED)ERROR: Worktree is dirty. Commit, stash, or clean it before sync.$(NC)"; \
+		git status --short; \
+		exit 1; \
+	fi
+	@CURRENT=$$(cat .github/upstream-version); \
+	if [ -n "$(TAG)" ]; then \
+		UPSTREAM="$(TAG)"; \
+	else \
+		UPSTREAM=$$(gh api repos/anomalyco/opencode/releases/latest --jq '.tag_name'); \
+	fi; \
+	echo "Current: $$CURRENT  Target: $$UPSTREAM"; \
+	git remote get-url upstream >/dev/null 2>&1 || git remote add upstream https://github.com/anomalyco/opencode.git; \
+	git fetch upstream "refs/tags/$$UPSTREAM:refs/tags/$$UPSTREAM"; \
+	git fetch origin gdpr/main; \
+	echo "$(GREEN)Preflight passed.$(NC)"
+
 ## sync-check: Check for new upstream release and open a PR if one exists (safe to run via cron)
 ## Usage: make sync-check              # uses latest upstream release
 ##        make sync-check TAG=v1.14.0  # targets a specific tag
@@ -309,7 +337,13 @@ sync-check:
 		echo "$(RED)ERROR: gh CLI is not authenticated. Run 'gh auth login'.$(NC)"; \
 		exit 1; \
 	fi
-	@CURRENT=$$(cat .github/upstream-version); \
+	@if [ -n "$$(git status --short)" ]; then \
+		echo "$(RED)ERROR: Worktree is dirty. Run make sync-preflight first and clean the tree.$(NC)"; \
+		git status --short; \
+		exit 1; \
+	fi
+	@set -e; \
+	CURRENT=$$(cat .github/upstream-version); \
 	if [ -n "$(TAG)" ]; then \
 		UPSTREAM="$(TAG)"; \
 	else \
@@ -325,16 +359,17 @@ sync-check:
 	git remote get-url upstream >/dev/null 2>&1 || git remote add upstream https://github.com/anomalyco/opencode.git; \
 	git fetch upstream "refs/tags/$$UPSTREAM:refs/tags/$$UPSTREAM"; \
 	git fetch origin gdpr/main; \
-	if git show-ref --verify --quiet "refs/heads/$$BRANCH"; then \
-		git branch -D "$$BRANCH"; \
-	fi; \
-	git checkout -B gdpr/main origin/gdpr/main; \
-	git checkout -b "$$BRANCH"; \
+	git checkout -B "$$BRANCH" origin/gdpr/main; \
+	BASE_SHA=$$(git rev-parse HEAD); \
 	CONFLICTS=false; \
 	if ! git merge "refs/tags/$$UPSTREAM" -X ours --no-edit --allow-unrelated-histories; then \
 		git add -A; \
 		git commit -m "sync: merge upstream $$UPSTREAM (conflicts present)"; \
 		CONFLICTS=true; \
+	fi; \
+	if [ "$$(git rev-parse HEAD)" = "$$BASE_SHA" ]; then \
+		echo "$(GREEN)gdpr/main already contains $$UPSTREAM — update .github/upstream-version if needed.$(NC)"; \
+		exit 0; \
 	fi; \
 	git push -u --force-with-lease origin "$$BRANCH"; \
 	CHANGED=$$(git diff --name-only "refs/tags/$$CURRENT" "refs/tags/$$UPSTREAM" 2>/dev/null | head -40 || true); \

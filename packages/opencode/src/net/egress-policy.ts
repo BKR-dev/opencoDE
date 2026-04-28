@@ -153,7 +153,7 @@ export async function fetchWithToolBypass(input: RequestInfo, init?: RequestInit
 }
 
 // Guard for package names (used by provider loader)
-const ALLOWED_PACKAGES = new Set<string>(["@ai-sdk/github-copilot"])
+const ALLOWED_PACKAGES = new Set<string>(["@ai-sdk/github-copilot", "@ai-sdk/openai-compatible"])
 export function packageAllowed(pkg: string) {
   if (!isEgressBlocked()) return true
   const allowed = ALLOWED_PACKAGES.has(pkg)

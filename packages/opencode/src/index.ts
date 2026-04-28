@@ -2,9 +2,9 @@ import yargs from "yargs"
 import { hideBin } from "yargs/helpers"
 import { RunCommand } from "./cli/cmd/run"
 import { GenerateCommand } from "./cli/cmd/generate"
-import { Log } from "./util/log"
-import { AuthCommand } from "./cli/cmd/auth"
-import { AuditCommand } from "./cli/cmd/audit"
+import { Log } from "./util"
+import { ConsoleCommand } from "./cli/cmd/account"
+import { ProvidersCommand } from "./cli/cmd/providers"
 import { AgentCommand } from "./cli/cmd/agent"
 import { UpgradeCommand } from "./cli/cmd/upgrade"
 import { UninstallCommand } from "./cli/cmd/uninstall"
@@ -29,8 +29,20 @@ import { EOL } from "os"
 import { WebCommand } from "./cli/cmd/web"
 import { PrCommand } from "./cli/cmd/pr"
 import { SessionCommand } from "./cli/cmd/session"
+import { DbCommand } from "./cli/cmd/db"
+import path from "path"
+import { Global } from "./global"
+import { JsonMigration } from "./storage"
+import { Database } from "./storage"
+import { errorMessage } from "./util/error"
+import { PluginCommand } from "./cli/cmd/plug"
+import { Heap } from "./cli/heap"
+import { drizzle } from "drizzle-orm/bun-sqlite"
+import { ensureProcessMetadata } from "./util/opencode-process"
 import { logGDPRStatus } from "./gdpr/build-constants"
 import { enableNetworkAudit } from "./audit/network"
+
+const processMetadata = ensureProcessMetadata("main")
 
 process.on("unhandledRejection", (e) => {
   Log.Default.error("rejection", {
@@ -73,6 +85,10 @@ const cli = yargs(args)
     type: "string",
     choices: ["DEBUG", "INFO", "WARN", "ERROR"],
   })
+  .option("pure", {
+    describe: "run without external plugins",
+    type: "boolean",
+  })
   .option("audit", {
     describe: "enable network audit logging (logs all HTTP requests for GDPR compliance verification)",
     type: "boolean",
@@ -105,6 +121,43 @@ const cli = yargs(args)
       run_id: processMetadata.runID,
     })
 
+    const marker = path.join(Global.Path.data, "opencode.db")
+    if (!(await Filesystem.exists(marker))) {
+      const tty = process.stderr.isTTY
+      process.stderr.write("Performing one time database migration, may take a few minutes..." + EOL)
+      const width = 36
+      const orange = "\x1b[38;5;214m"
+      const muted = "\x1b[0;2m"
+      const reset = "\x1b[0m"
+      let last = -1
+      if (tty) process.stderr.write("\x1b[?25l")
+      try {
+        await JsonMigration.run(drizzle({ client: Database.Client().$client }), {
+          progress: (event) => {
+            const percent = Math.floor((event.current / event.total) * 100)
+            if (percent === last && event.current !== event.total) return
+            last = percent
+            if (tty) {
+              const fill = Math.round((percent / 100) * width)
+              const bar = `${"■".repeat(fill)}${"･".repeat(width - fill)}`
+              process.stderr.write(
+                `\r${orange}${bar} ${percent.toString().padStart(3)}%${reset} ${muted}${event.label.padEnd(12)} ${event.current}/${event.total}${reset}`,
+              )
+              if (event.current === event.total) process.stderr.write("\n")
+            } else {
+              process.stderr.write(`sqlite-migration:${percent}${EOL}`)
+            }
+          },
+        })
+      } finally {
+        if (tty) process.stderr.write("\x1b[?25h")
+        else {
+          process.stderr.write(`sqlite-migration:done${EOL}`)
+        }
+      }
+      process.stderr.write("Database migration complete." + EOL)
+    }
+
     // Log GDPR status at startup
     logGDPRStatus()
 
@@ -122,8 +175,8 @@ const cli = yargs(args)
   .command(RunCommand)
   .command(GenerateCommand)
   .command(DebugCommand)
-  .command(AuthCommand)
-  .command(AuditCommand)
+  .command(ConsoleCommand)
+  .command(ProvidersCommand)
   .command(AgentCommand)
   .command(UpgradeCommand)
   .command(UninstallCommand)

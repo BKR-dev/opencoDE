@@ -7,25 +7,43 @@ Sync is driven by local `make` commands using upstream GitHub release tags. No G
 ## Normal workflow
 
 ```bash
-# Step 1: check for a new upstream release and open or reuse a PR
-make sync-check
+# Step 1: validate environment and repo state
+make sync-preflight TAG=v1.14.23
 
-# Step 2: review and checkout the branch
+# Step 2: create or refresh the sync branch and open or reuse a PR
+make sync-check TAG=v1.14.23
+
+# Step 3: review and checkout the branch
 make sync-checkout TAG=v1.14.23
 
-# Step 3: validate GDPR compliance
+# Step 4: validate GDPR compliance
 make sync-validate
 make verify-gdpr
 
-# Step 4: merge the PR
+# Step 5: merge the PR
 make sync-merge
 
-# Step 5: record the new version
+# Step 6: record the new version
 echo "v1.14.23" > .github/upstream-version
 git add .github/upstream-version
 git commit -m "chore: update upstream-version to v1.14.23 post-merge"
 git push origin gdpr/main
 ```
+
+---
+
+## Failure categories
+
+Treat failures as one of these buckets:
+
+1. Environment failure
+2. Git/worktree state failure
+3. Merge conflict requiring code changes
+4. Baseline repo-health failure
+5. Validation failure after sync
+6. Remote integration failure (`push`, `gh pr create`, `gh pr merge`)
+
+If you are using an AI agent, fix only the root-cause issue inside the reported bucket. Do not guess across buckets.
 
 ---
 
@@ -49,6 +67,21 @@ Requirements for the user running cron:
 
 ## Step-by-step detail
 
+### sync-preflight
+
+```bash
+make sync-preflight TAG=v1.14.23
+```
+
+What it does:
+
+- Verifies `gh` exists and is authenticated
+- Fails if the worktree is dirty
+- Resolves the target upstream release tag
+- Ensures the `upstream` remote exists and fetches the target tag
+- Fetches `origin/gdpr/main`
+- Stops before creating or modifying any branch state
+
 ### sync-check
 
 ```bash
@@ -60,13 +93,15 @@ What it does:
 
 - Reads `.github/upstream-version`
 - Resolves the target upstream GitHub release tag
+- Fails on dirty worktrees
 - Exits cleanly if already current
 - Ensures the `upstream` remote exists and fetches the target tag
-- Refreshes local `gdpr/main` from `origin/gdpr/main`
-- Creates a fresh local `sync/upstream-vX.X.X` branch
+- Creates or resets `sync/upstream-vX.X.X` directly from `origin/gdpr/main`
 - Merges the upstream tag with `-X ours` so GDPR fork behavior wins conflicts
+- Exits early if `gdpr/main` already contains the target release
 - Pushes the sync branch
 - Opens a PR to `gdpr/main`, or reports the existing open PR for that branch
+- Stops immediately on remote failures instead of printing success
 
 Target a specific tag instead of latest:
 
@@ -136,8 +171,7 @@ make sync-merge
 git remote get-url upstream >/dev/null 2>&1 || git remote add upstream https://github.com/anomalyco/opencode.git
 git fetch upstream refs/tags/v1.14.23:refs/tags/v1.14.23
 git fetch origin gdpr/main
-git checkout -B gdpr/main origin/gdpr/main
-git checkout -b sync/upstream-v1.14.23
+git checkout -B sync/upstream-v1.14.23 origin/gdpr/main
 git merge refs/tags/v1.14.23 -X ours --no-edit --allow-unrelated-histories
 make sync-validate
 make verify-gdpr

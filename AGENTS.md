@@ -68,27 +68,32 @@ Upstream sync is driven by local `make` commands using upstream GitHub release t
 Normal flow:
 
 ```bash
-# Step 1: detect the latest upstream release tag and open or reuse a PR
-make sync-check
+# Step 1: validate environment and repo state
+make sync-preflight TAG=vX.X.X
 
-# Step 2: review the sync branch locally
+# Step 2: detect the target release tag and prepare the sync branch
+make sync-check TAG=vX.X.X
+
+# Step 3: review the sync branch locally
 make sync-checkout TAG=vX.X.X
 
-# Step 3: run local GDPR validation
+# Step 4: run local GDPR validation
 make sync-validate
 make verify-gdpr
 
-# Step 4: merge the open sync PR
+# Step 5: merge the open sync PR
 make sync-merge
 ```
 
 Behavioral notes:
 
+- `sync-preflight` is the first command for maintainers and AI agents
 - Source of truth is the latest upstream GitHub release tag, or an explicit `TAG=vX.X.X`
 - `sync-check` is safe to run from cron when already up to date
-- `sync-check` refreshes local `gdpr/main` from `origin/gdpr/main`
-- `sync-check` recreates the local `sync/upstream-vX.X.X` branch and reuses an existing PR if one is already open
+- `sync-check` creates or resets the local `sync/upstream-vX.X.X` branch from `origin/gdpr/main` and reuses an existing PR if one is already open
 - Validation remains manual via `make sync-validate` and `make verify-gdpr`
+- Agents should classify failures into environment, git/worktree, merge, baseline health, validation, or remote-integration failures
+- Agents may fix issues within a clearly identified bucket, but should stop and report if root cause is unclear
 
 **After merging a sync PR:**
 

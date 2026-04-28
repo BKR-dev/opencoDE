@@ -12,10 +12,14 @@ import type { SessionID } from "@/session/schema"
 import { Database, eq } from "@/storage"
 import { Config } from "@/config"
 import { Log } from "@/util"
+import { isSessionSharingDisabled } from "../gdpr/build-constants"
 import { SessionShareTable } from "./share.sql"
 
 const log = Log.create({ service: "share-next" })
-const disabled = process.env["OPENCODE_DISABLE_SHARE"] === "true" || process.env["OPENCODE_DISABLE_SHARE"] === "1"
+
+function disabled() {
+  return isSessionSharingDisabled()
+}
 
 export type Api = {
   create: string
@@ -118,7 +122,7 @@ export const layer = Layer.effect(
 
     function sync(sessionID: SessionID, data: Data[]): Effect.Effect<void> {
       return Effect.gen(function* () {
-        if (disabled) return
+        if (disabled()) return
         const share = yield* getCached(sessionID)
         if (!share) return
 
@@ -160,7 +164,7 @@ export const layer = Layer.effect(
           ),
         )
 
-        if (disabled) return cache
+        if (disabled()) return cache
 
         const watch = <D extends { type: string }>(
           def: D,
@@ -245,7 +249,7 @@ export const layer = Layer.effect(
     })
 
     const flush = Effect.fn("ShareNext.flush")(function* (sessionID: SessionID) {
-      if (disabled) return
+      if (disabled()) return
       const s = yield* InstanceState.get(state)
       const queued = s.queue.get(sessionID)
       if (!queued) return
@@ -295,7 +299,7 @@ export const layer = Layer.effect(
     })
 
     const init = Effect.fn("ShareNext.init")(function* () {
-      if (disabled) return
+      if (disabled()) return
       yield* InstanceState.get(state)
     })
 
@@ -304,7 +308,7 @@ export const layer = Layer.effect(
     })
 
     const create = Effect.fn("ShareNext.create")(function* (sessionID: SessionID) {
-      if (disabled) return { id: "", url: "", secret: "" }
+      if (disabled()) return { id: "", url: "", secret: "" }
       log.info("creating share", { sessionID })
       const req = yield* request()
       const result = yield* HttpClientRequest.post(`${req.baseUrl}${req.api.create}`).pipe(
@@ -337,7 +341,7 @@ export const layer = Layer.effect(
     })
 
     const remove = Effect.fn("ShareNext.remove")(function* (sessionID: SessionID) {
-      if (disabled) return
+      if (disabled()) return
       log.info("removing share", { sessionID })
       const s = yield* InstanceState.get(state)
       const share = yield* getCached(sessionID)
