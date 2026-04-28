@@ -31,42 +31,82 @@ export interface ExecuteResult<M extends Metadata = Metadata> {
   attachments?: Omit<MessageV2.FilePart, "id" | "sessionID" | "messageID">[]
 }
 
-  export function define<Parameters extends z.ZodType, Result extends Metadata>(
-    id: string,
-    init: Info<Parameters, Result>["init"] | Awaited<ReturnType<Info<Parameters, Result>["init"]>>,
-  ): Info<Parameters, Result> {
-    return {
-      id,
-      init: async (initCtx) => {
-        const toolInfo = init instanceof Function ? await init(initCtx) : init
-        const execute = toolInfo.execute
-        toolInfo.execute = async (args, ctx) => {
-          try {
-            toolInfo.parameters.parse(args)
-          } catch (error) {
-            if (error instanceof z.ZodError && toolInfo.formatValidationError) {
-              throw new Error(toolInfo.formatValidationError(error), { cause: error })
-            }
-            throw new Error(
-              `The ${id} tool was called with invalid arguments: ${error}.\nPlease rewrite the input so it satisfies the expected schema.`,
-              { cause: error },
-            )
-          }
-          // wrap ctx.ask to audit permission checks
-          try {
-            const originalAsk = ctx.ask
-            ctx.ask = async (input) => {
-              try {
-                const { auditRecordNoWait } = await import("../audit")
-                auditRecordNoWait("tool.ask", { tool: id, sessionID: ctx.sessionID, permission: input.permission, patterns: input.patterns, metadata: input.metadata, time: new Date().toISOString() })
-              } catch (e) {}
-              return originalAsk(input)
-            }
-          } catch (e) {
-            // ignore
-          }
-          const result = await execute(args, ctx)
-          // skip truncation for tools that handle it themselves
+export interface Def<
+  Parameters extends Schema.Decoder<unknown> = Schema.Decoder<unknown>,
+  M extends Metadata = Metadata,
+> {
+  id: string
+  description: string
+  parameters: Parameters
+  execute(args: Schema.Schema.Type<Parameters>, ctx: Context): Effect.Effect<ExecuteResult<M>>
+  formatValidationError?(error: unknown): string
+}
+export type DefWithoutID<
+  Parameters extends Schema.Decoder<unknown> = Schema.Decoder<unknown>,
+  M extends Metadata = Metadata,
+> = Omit<Def<Parameters, M>, "id">
+
+export interface Info<
+  Parameters extends Schema.Decoder<unknown> = Schema.Decoder<unknown>,
+  M extends Metadata = Metadata,
+> {
+  id: string
+  init: () => Effect.Effect<DefWithoutID<Parameters, M>>
+}
+
+type Init<Parameters extends Schema.Decoder<unknown>, M extends Metadata> =
+  | DefWithoutID<Parameters, M>
+  | (() => Effect.Effect<DefWithoutID<Parameters, M>>)
+
+export type InferParameters<T> =
+  T extends Info<infer P, any>
+    ? Schema.Schema.Type<P>
+    : T extends Effect.Effect<Info<infer P, any>, any, any>
+      ? Schema.Schema.Type<P>
+      : never
+export type InferMetadata<T> =
+  T extends Info<any, infer M> ? M : T extends Effect.Effect<Info<any, infer M>, any, any> ? M : never
+
+export type InferDef<T> =
+  T extends Info<infer P, infer M>
+    ? Def<P, M>
+    : T extends Effect.Effect<Info<infer P, infer M>, any, any>
+      ? Def<P, M>
+      : never
+
+function wrap<Parameters extends Schema.Decoder<unknown>, Result extends Metadata>(
+  id: string,
+  init: Init<Parameters, Result>,
+  truncate: Truncate.Interface,
+  agents: Agent.Interface,
+) {
+  return () =>
+    Effect.gen(function* () {
+      const toolInfo = typeof init === "function" ? { ...(yield* init()) } : { ...init }
+      // Compile the parser closure once per tool init; `decodeUnknownEffect`
+      // allocates a new closure per call, so hoisting avoids re-closing it for
+      // every LLM tool invocation.
+      const decode = Schema.decodeUnknownEffect(toolInfo.parameters)
+      const execute = toolInfo.execute
+      toolInfo.execute = (args, ctx) => {
+        const attrs = {
+          "tool.name": id,
+          "session.id": ctx.sessionID,
+          "message.id": ctx.messageID,
+          ...(ctx.callID ? { "tool.call_id": ctx.callID } : {}),
+        }
+        return Effect.gen(function* () {
+          const decoded = yield* decode(args).pipe(
+            Effect.mapError((error) =>
+              toolInfo.formatValidationError
+                ? new Error(toolInfo.formatValidationError(error), { cause: error })
+                : new Error(
+                    `The ${id} tool was called with invalid arguments: ${error}.\nPlease rewrite the input so it satisfies the expected schema.`,
+                    { cause: error },
+                  ),
+            ),
+          )
+          const result = yield* execute(decoded as Schema.Schema.Type<Parameters>, ctx)
           if (result.metadata.truncated !== undefined) {
             return result
           }

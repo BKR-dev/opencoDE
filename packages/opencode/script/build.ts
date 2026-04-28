@@ -15,12 +15,68 @@ process.chdir(dir)
 await import("./generate.ts")
 
 import { Script } from "@opencode-ai/script"
-import { getBuildConfig, toBuildDefines } from "./gdpr-config"
+import pkg from "../package.json"
+
+// Load migrations from migration directories
+const migrationDirs = (
+  await fs.promises.readdir(path.join(dir, "migration"), {
+    withFileTypes: true,
+  })
+)
+  .filter((entry) => entry.isDirectory() && /^\d{4}\d{2}\d{2}\d{2}\d{2}\d{2}/.test(entry.name))
+  .map((entry) => entry.name)
+  .sort()
+
+const migrations = await Promise.all(
+  migrationDirs.map(async (name) => {
+    const file = path.join(dir, "migration", name, "migration.sql")
+    const sql = await Bun.file(file).text()
+    const match = /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})/.exec(name)
+    const timestamp = match
+      ? Date.UTC(
+          Number(match[1]),
+          Number(match[2]) - 1,
+          Number(match[3]),
+          Number(match[4]),
+          Number(match[5]),
+          Number(match[6]),
+        )
+      : 0
+    return { sql, timestamp, name }
+  }),
+)
+console.log(`Loaded ${migrations.length} migrations`)
 
 const singleFlag = process.argv.includes("--single")
 const baselineFlag = process.argv.includes("--baseline")
 const skipInstall = process.argv.includes("--skip-install")
-const gdprConfig = getBuildConfig()
+const plugin = createSolidTransformPlugin()
+const skipEmbedWebUi = process.argv.includes("--skip-embed-web-ui")
+
+const createEmbeddedWebUIBundle = async () => {
+  console.log(`Building Web UI to embed in the binary`)
+  const appDir = path.join(import.meta.dirname, "../../app")
+  const dist = path.join(appDir, "dist")
+  await $`bun run --cwd ${appDir} build`
+  const files = (await Array.fromAsync(new Bun.Glob("**/*").scan({ cwd: dist })))
+    .map((file) => file.replaceAll("\\", "/"))
+    .sort()
+  const imports = files.map((file, i) => {
+    const spec = path.relative(dir, path.join(dist, file)).replaceAll("\\", "/")
+    return `import file_${i} from ${JSON.stringify(spec.startsWith(".") ? spec : `./${spec}`)} with { type: "file" };`
+  })
+  const entries = files.map((file, i) => `  ${JSON.stringify(file)}: file_${i},`)
+  return [
+    `// Import all files as file_$i with type: "file"`,
+    ...imports,
+    `// Export with original mappings`,
+    `export default {`,
+    ...entries,
+    `}`,
+  ].join("\n")
+}
+
+const embeddedFileMap = skipEmbedWebUi ? null : await createEmbeddedWebUIBundle()
 
 const allTargets: {
   os: string
@@ -121,23 +177,9 @@ for (const item of targets) {
     item.arch,
     item.avx2 === false ? "baseline" : undefined,
     item.abi === undefined ? undefined : item.abi,
-    // Add GDPR suffix for GDPR-hardened builds
-    gdprConfig.OPENCODE_BUILD_MODE !== "standard" ? "gdpr" : undefined,
   ]
     .filter(Boolean)
     .join("-")
-
-  // Create a target name without the GDPR suffix for Bun.build
-  const targetName = [
-    pkg.name,
-    item.os === "win32" ? "windows" : item.os,
-    item.arch,
-    item.avx2 === false ? "baseline" : undefined,
-    item.abi === undefined ? undefined : item.abi,
-  ]
-    .filter(Boolean)
-    .join("-")
-
   console.log(`building ${name}`)
   await $`mkdir -p dist/${name}/bin`
 
@@ -163,7 +205,7 @@ for (const item of targets) {
       autoloadDotenv: false,
       autoloadTsconfig: true,
       autoloadPackageJson: true,
-      target: targetName.replace(pkg.name, "bun") as any,
+      target: name.replace(pkg.name, "bun") as any,
       outfile: `dist/${name}/bin/opencode`,
       execArgv: [`--user-agent=opencode/${Script.version}`, "--use-system-ca", "--"],
       windows: {},
@@ -177,8 +219,6 @@ for (const item of targets) {
       OPENCODE_WORKER_PATH: workerPath,
       OPENCODE_CHANNEL: `'${Script.channel}'`,
       OPENCODE_LIBC: item.os === "linux" ? `'${item.abi ?? "glibc"}'` : "",
-      // GDPR build-time constants (tamper-proof)
-      ...toBuildDefines(gdprConfig),
     },
   })
 

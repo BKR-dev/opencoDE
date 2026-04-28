@@ -19,7 +19,11 @@ import { Bus } from "@/bus"
 import { Wildcard } from "@/util"
 import { SessionID } from "@/session/schema"
 import { Auth } from "@/auth"
-import { logProviderUsage } from "@/audit/gdpr"
+import { Installation } from "@/installation"
+import { InstallationVersion } from "@/installation/version"
+import { EffectBridge } from "@/effect"
+import * as Option from "effect/Option"
+import * as OtelTracer from "@effect/opentelemetry/Tracer"
 
 const log = Log.create({ service: "llm" })
 export const OUTPUT_TOKEN_MAX = ProviderTransform.OUTPUT_TOKEN_MAX
@@ -46,35 +50,9 @@ export type StreamRequest = StreamInput & {
 
 export type Event = Result["fullStream"] extends AsyncIterable<infer T> ? T : never
 
-  export async function stream(input: StreamInput) {
-    // GDPR Audit: Log provider/model usage for accountability
-    logProviderUsage({
-      sessionID: input.sessionID,
-      providerID: input.model.providerID,
-      modelID: input.model.id,
-      agent: input.agent.name,
-      purpose: "chat_completion",
-    })
-
-    const l = log
-      .clone()
-      .tag("providerID", input.model.providerID)
-      .tag("modelID", input.model.id)
-      .tag("sessionID", input.sessionID)
-      .tag("small", (input.small ?? false).toString())
-      .tag("agent", input.agent.name)
-      .tag("mode", input.agent.mode)
-    l.info("stream", {
-      modelID: input.model.id,
-      providerID: input.model.providerID,
-    })
-    const [language, cfg, provider, auth] = await Promise.all([
-      Provider.getLanguage(input.model),
-      Config.get(),
-      Provider.getProvider(input.model.providerID),
-      Auth.get(input.model.providerID),
-    ])
-    const isCodex = provider.id === "openai" && auth?.type === "oauth"
+export interface Interface {
+  readonly stream: (input: StreamInput) => Stream.Stream<Event, unknown>
+}
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/LLM") {}
 

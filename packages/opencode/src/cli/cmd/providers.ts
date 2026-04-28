@@ -12,7 +12,9 @@ import { Global } from "../../global"
 import { Plugin } from "../../plugin"
 import { Instance } from "../../project/instance"
 import type { Hooks } from "@opencode-ai/plugin"
-import { isGitHubOnlyMode } from "../../gdpr/build-constants"
+import { Process } from "../../util"
+import { text } from "node:stream/consumers"
+import { Effect } from "effect"
 
 type PluginAuth = NonNullable<Hooks["auth"]>
 
@@ -227,12 +229,14 @@ export const ProvidersListCommand = cmd({
     const homedir = os.homedir()
     const displayPath = authPath.startsWith(homedir) ? authPath.replace(homedir, "~") : authPath
     prompts.intro(`Credentials ${UI.Style.TEXT_DIM}${displayPath}`)
-    let results = Object.entries(await Auth.all())
+    const results = await AppRuntime.runPromise(
+      Effect.gen(function* () {
+        const auth = yield* Auth.Service
+        return Object.entries(yield* auth.all())
+      }),
+    )
     const database = await ModelsDev.get()
 
-    if (isGitHubOnlyMode()) {
-      results = results.filter(([providerID]) => providerID in database)
-    }
     for (const [providerID, result] of results) {
       const name = database[providerID]?.name || providerID
       prompts.log.info(`${name} ${UI.Style.TEXT_DIM}${result.type}`)
@@ -480,15 +484,19 @@ export const ProvidersLogoutCommand = cmd({
   describe: "log out from a configured provider",
   async handler(_args) {
     UI.empty()
-    const allCreds = Object.entries(await Auth.all())
-    const database = await ModelsDev.get()
-    const credentials = isGitHubOnlyMode() ? allCreds.filter(([key]) => key in database) : allCreds
+    const credentials: Array<[string, Auth.Info]> = await AppRuntime.runPromise(
+      Effect.gen(function* () {
+        const auth = yield* Auth.Service
+        return Object.entries(yield* auth.all())
+      }),
+    )
     prompts.intro("Remove credential")
     if (credentials.length === 0) {
       prompts.log.error("No credentials found")
       return
     }
-    const providerID = await prompts.select({
+    const database = await ModelsDev.get()
+    const selected = await prompts.select({
       message: "Select provider",
       options: credentials.map(([key, value]) => ({
         label: (database[key]?.name || key) + UI.Style.TEXT_DIM + " (" + value.type + ")",

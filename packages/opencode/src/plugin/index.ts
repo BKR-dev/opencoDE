@@ -12,96 +12,34 @@ import { createOpencodeClient } from "@opencode-ai/sdk"
 import { Flag } from "../flag/flag"
 import { CodexAuthPlugin } from "./codex"
 import { Session } from "../session"
-import { NamedError } from "@opencode-ai/util/error"
-import { CopilotAuthPlugin } from "./copilot"
-import { isGitHubOnlyMode } from "../gdpr/build-constants"
+import { NamedError } from "@opencode-ai/shared/util/error"
+import { CopilotAuthPlugin } from "./github-copilot/copilot"
+import { gitlabAuthPlugin as GitlabAuthPlugin } from "opencode-gitlab-auth"
+import { PoeAuthPlugin } from "opencode-poe-auth"
+import { CloudflareAIGatewayAuthPlugin, CloudflareWorkersAuthPlugin } from "./cloudflare"
+import { Effect, Layer, Context, Stream } from "effect"
+import { EffectBridge } from "@/effect"
+import { InstanceState } from "@/effect"
+import { errorMessage } from "@/util/error"
+import { PluginLoader } from "./loader"
+import { parsePluginSpecifier, readPluginId, readV1Plugin, resolvePluginId } from "./shared"
+import { registerAdaptor } from "@/control-plane/adaptors"
+import type { WorkspaceAdaptor } from "@/control-plane/types"
 
 const log = Log.create({ service: "plugin" })
 
-  const BUILTIN: string[] = ["@gitlab/opencode-gitlab-auth@1.3.2"]
+type State = {
+  hooks: Hooks[]
+}
 
-  // Built-in plugins that are directly imported (not installed from npm)
-  const INTERNAL_PLUGINS: PluginInstance[] = isGitHubOnlyMode()
-    ? [CopilotAuthPlugin]
-    : [CodexAuthPlugin, CopilotAuthPlugin]
+// Hook names that follow the (input, output) => Promise<void> trigger pattern
+type TriggerName = {
+  [K in keyof Hooks]-?: NonNullable<Hooks[K]> extends (input: any, output: any) => Promise<void> ? K : never
+}[keyof Hooks]
 
-  const state = Instance.state(async () => {
-    const client = createOpencodeClient({
-      baseUrl: "http://localhost:4096",
-      // @ts-ignore - fetch type incompatibility
-      fetch: async (...args) => Server.App().fetch(...args),
-    })
-    const config = await Config.get()
-    const hooks: Hooks[] = []
-    const input: PluginInput = {
-      client,
-      project: Instance.project,
-      worktree: Instance.worktree,
-      directory: Instance.directory,
-      serverUrl: Server.url(),
-      $: Bun.$,
-    }
-
-    for (const plugin of INTERNAL_PLUGINS) {
-      log.info("loading internal plugin", { name: plugin.name })
-      const init = await plugin(input)
-      hooks.push(init)
-    }
-
-    const plugins = isGitHubOnlyMode() ? [] : [...(config.plugin ?? [])]
-    if (!Flag.OPENCODE_DISABLE_DEFAULT_PLUGINS && !isGitHubOnlyMode()) {
-      plugins.push(...BUILTIN)
-    }
-
-    for (let plugin of plugins) {
-      // ignore old codex plugin since it is supported first party now
-      if (plugin.includes("opencode-openai-codex-auth") || plugin.includes("opencode-copilot-auth")) continue
-      log.info("loading plugin", { path: plugin })
-      if (!plugin.startsWith("file://")) {
-        const lastAtIndex = plugin.lastIndexOf("@")
-        const pkg = lastAtIndex > 0 ? plugin.substring(0, lastAtIndex) : plugin
-        const version = lastAtIndex > 0 ? plugin.substring(lastAtIndex + 1) : "latest"
-        const builtin = BUILTIN.some((x) => x.startsWith(pkg + "@"))
-        plugin = await BunProc.install(pkg, version).catch((err) => {
-          if (!builtin) throw err
-
-          const message = err instanceof Error ? err.message : String(err)
-          log.error("failed to install builtin plugin", {
-            pkg,
-            version,
-            error: message,
-          })
-          Bus.publish(Session.Event.Error, {
-            error: new NamedError.Unknown({
-              message: `Failed to install built-in plugin ${pkg}@${version}: ${message}`,
-            }).toObject(),
-          })
-
-          return ""
-        })
-        if (!plugin) continue
-      }
-      const mod = await import(plugin)
-      // Prevent duplicate initialization when plugins export the same function
-      // as both a named export and default export (e.g., `export const X` and `export default X`).
-      // Object.entries(mod) would return both entries pointing to the same function reference.
-      const seen = new Set<PluginInstance>()
-      for (const [_name, fn] of Object.entries<PluginInstance>(mod)) {
-        if (seen.has(fn)) continue
-        seen.add(fn)
-        const init = await fn(input)
-        hooks.push(init)
-      }
-    }
-
-    return {
-      hooks,
-      input,
-    }
-  })
-
-  export async function trigger<
-    Name extends Exclude<keyof Required<Hooks>, "auth" | "event" | "tool">,
+export interface Interface {
+  readonly trigger: <
+    Name extends TriggerName,
     Input = Parameters<Required<Hooks>[Name]>[0],
     Output = Parameters<Required<Hooks>[Name]>[1],
   >(
