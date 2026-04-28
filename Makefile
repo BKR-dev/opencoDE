@@ -239,7 +239,7 @@ verify-gdpr: test-gdpr
 	fi
 	@echo ""
 	@echo "  [2/4] Checking models.dev blocking..."
-	@if grep -A5 "export async function refresh()" packages/opencode/src/provider/models.ts | grep -q "OPENCODE_ONLY_GITHUB"; then \
+	@if grep -A10 "export async function refresh" packages/opencode/src/provider/models.ts | grep -q "isGitHubOnlyMode()"; then \
 		echo "$(GREEN)    ✓ PASS: models.dev blocked in GDPR mode$(NC)"; \
 	else \
 		echo "$(RED)    ✗ FAIL: models.dev not blocked in GDPR mode$(NC)"; \
@@ -247,7 +247,7 @@ verify-gdpr: test-gdpr
 	fi
 	@echo ""
 	@echo "  [3/4] Checking session sharing defaults..."
-	@if grep -A10 "const disabled" packages/opencode/src/share/share.ts | grep -q "githubOnlyMode"; then \
+	@if grep -A5 "isSessionSharingDisabled()" packages/opencode/src/share/session.ts | grep -q "conf.share == \"disabled\"\|isSessionSharingDisabled()"; then \
 		echo "$(GREEN)    ✓ PASS: Session sharing disabled by default$(NC)"; \
 	else \
 		echo "$(RED)    ✗ FAIL: Session sharing not properly disabled$(NC)"; \
@@ -255,7 +255,7 @@ verify-gdpr: test-gdpr
 	fi
 	@echo ""
 	@echo "  [4/4] Checking config override protection..."
-	@if grep -A5 "githubOnlyMode = " packages/opencode/src/provider/provider.ts | grep -q "OPENCODE_ONLY_GITHUB"; then \
+	@if grep -A12 "const githubOnlyMode = isGitHubOnlyMode()" packages/opencode/src/provider/provider.ts | grep -q 'github-copilot'; then \
 		echo "$(GREEN)    ✓ PASS: Config override protection in place$(NC)"; \
 	else \
 		echo "$(RED)    ✗ FAIL: Config override protection missing$(NC)"; \
